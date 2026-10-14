@@ -7,6 +7,9 @@ Deadline: 2026-10-16 00:43 Europe/Bucharest. Prioritize a playable, elegant, mod
 2. Online multiplayer: authoritative WebSocket game server, room code/invite, turn enforcement, synchronized moves, reconnection, clocks, resign/draw.
 3. Bots: original random, capture-greedy, material/positional heuristic, minimax, alpha-beta + iterative deepening/transposition table; optional Stockfish UCI as highest-level opponent. Expose a meaningful difficulty ladder.
 
+## Scope guardrail
+Play is mandatory. Analyze is the only stretch goal. Learn (puzzles, tutorials, opening/endgame lessons) is excluded. No accounts, social features, tournaments, monetization or persistent user database. See SCOPE.md.
+
 ## Technical baseline
 TypeScript monorepo with npm workspaces. React + Vite frontend, Node.js WebSocket backend, shared pure rules/game module. Prefer chess.js for correct rules; write original AI search engines against legal moves. Keep dependency count modest. Never copy third-party chess engine source without complying with its license.
 

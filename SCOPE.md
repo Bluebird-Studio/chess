@@ -1,6 +1,6 @@
 # Product scope and acceptance criteria — 24-hour experiment
 
-Deadline: 2026-10-16 00:43 Europe/Bucharest. The project is **Play + Analyze + Learn**, with strict priority: **Play must ship polished and functional; Analyze is a stretch goal; Learn only after Play and Analyze are in good shape.**
+Deadline: 2026-10-16 00:43 Europe/Bucharest. The project is **Play + Analyze**, with strict priority: **Play must ship polished and functional; Analyze is a stretch goal. Learn is explicitly excluded.**
 
 ## P0 — PLAY (mandatory, no compromise)
 - Correct chess rules and endings: check, checkmate, stalemate, insufficient material, repetition, fifty-move rule, castling, en passant, promotion choice, resignation and draw.
@@ -14,11 +14,8 @@ Deadline: 2026-10-16 00:43 Europe/Bucharest. The project is **Play + Analyze + L
 - Move-by-move game replay, PGN/FEN import/export, evaluation bar, candidate engine lines, move quality/blunder hints. Implement incrementally; never sacrifice P0.
 - If deeper search is too expensive in the browser, use a worker or bounded analysis with responsive cancellation.
 
-## P2 — LEARN (only after P0/P1)
-- Tactical puzzles with validation and hints; opening practice; simple endgame exercises. Prefer one genuinely usable learning flow to several stubs.
-
 ## Explicitly out of scope for this experiment
-Accounts/auth, social feeds, tournaments, monetization, Elo leaderboards, permanent game databases, elaborate microservices, a full chess platform, complex deployment infrastructure.
+Learning features (puzzles, lessons, opening trainers, endgame exercises), accounts/auth, social feeds, tournaments, monetization, Elo leaderboards, permanent game databases, elaborate microservices, a full chess platform, complex deployment infrastructure.
 
 ## Engineering execution
 - Frontend owner: polished board, UX, local game and integration.
@@ -27,4 +24,4 @@ Accounts/auth, social feeds, tournaments, monetization, Elo leaderboards, perman
 - QA: verify two-player gameplay, multiplayer and bots; fix high-severity defects.
 - Auditor: identify only actionable blockers and feature gaps; don't stall progress.
 - Each iteration must produce real working code or verified integration/test results; push commits. Do not add speculative abstractions. 
-- Prioritize P0 relentlessly. After P0 works end to end, P1 then P2.
+- Prioritize P0 relentlessly. After P0 works end to end, P1 only.

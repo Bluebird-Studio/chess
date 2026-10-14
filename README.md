@@ -24,8 +24,10 @@ The web app runs on Vite (typically http://localhost:5173). WebSocket server lis
 
 ## Roadmap
 
-1. Foundation: local play, rules, move history, premium responsive board
-2. Multiplayer: server-backed matches, invitations, clocks, reconnect and lifecycle
-3. Bots: random, greedy, minimax, alpha-beta, stronger engine search, optional Stockfish
+1. Play foundation: local play, rules, move history, premium responsive board
+2. Play multiplayer: server-backed matches, invitations, clocks, reconnect and lifecycle
+3. Play bots: random, greedy, minimax, alpha-beta, stronger engine search, optional Stockfish
 
-See `AGENTS.md` for development assignments and the deadline.
+4. Analyze (stretch): game replay, PGN/FEN, evaluation, move quality.
+
+Learning features are deliberately out of scope. See `SCOPE.md` and `AGENTS.md` for priorities and the deadline.
