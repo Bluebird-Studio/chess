@@ -49,3 +49,65 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   assert.equal((await blackInbox(m=>m.type==='state'&&m.rematch===true)).gameOver,false);
  }finally{for(const ws of clients)ws.terminate();child.kill('SIGTERM')}
 });
+
+test('reconnect restores the correct seat and rejects invalid tokens', { timeout: 15000 }, async () => {
+  const port = 22000 + Math.floor(Math.random() * 3000);
+  const child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
+    cwd: process.cwd(), env: { ...process.env, PORT: String(port) }, stdio: 'pipe'
+  });
+  const clients: WebSocket[] = [];
+  async function connect() {
+    for (let i = 0; i < 50; i++) {
+      try {
+        const ws = await new Promise<WebSocket>((resolve, reject) => {
+          const socket = new WebSocket('ws://127.0.0.1:' + port);
+          socket.once('open', () => resolve(socket));
+          socket.once('error', reject);
+        });
+        clients.push(ws);
+        return ws;
+      } catch { await delay(100); }
+    }
+    throw Error('Server did not start');
+  }
+  try {
+    const white = await connect();
+    const readWhite = inbox(white);
+    white.send(JSON.stringify({ type: 'create' }));
+    const created = await readWhite(m => m.type === 'joined');
+    assert.equal(typeof created.token, 'string');
+
+    const black = await connect();
+    const readBlack = inbox(black);
+    black.send(JSON.stringify({ type: 'join', roomId: created.roomId }));
+    const joined = await readBlack(m => m.type === 'joined');
+    assert.notEqual(joined.token, created.token);
+    await readWhite(m => m.type === 'state');
+    await readBlack(m => m.type === 'state');
+    white.send(JSON.stringify({ type: 'move', from: 'e2', to: 'e4' }));
+    await readBlack(m => m.type === 'state' && m.history.length === 1);
+
+    black.close();
+    await readWhite(m => m.type === 'opponent_disconnected');
+
+    const attacker = await connect();
+    const readAttacker = inbox(attacker);
+    attacker.send(JSON.stringify({ type: 'join', roomId: created.roomId }));
+    assert.equal((await readAttacker(m => m.type === 'error')).message, 'Room unavailable');
+    attacker.send(JSON.stringify({ type: 'reconnect', roomId: created.roomId, token: 'wrong' }));
+    assert.equal((await readAttacker(m => m.type === 'error')).message, 'Invalid reconnect credentials');
+
+    const recovered = await connect();
+    const readRecovered = inbox(recovered);
+    recovered.send(JSON.stringify({ type: 'reconnect', roomId: created.roomId, token: joined.token }));
+    const restored = await readRecovered(m => m.type === 'joined');
+    assert.equal(restored.color, 'b');
+    assert.equal(restored.reconnected, true);
+    assert.deepEqual((await readRecovered(m => m.type === 'state')).history, ['e4']);
+    recovered.send(JSON.stringify({ type: 'move', from: 'e7', to: 'e5' }));
+    assert.deepEqual((await readWhite(m => m.type === 'state' && m.history.length === 2)).history, ['e4', 'e5']);
+  } finally {
+    for (const ws of clients) ws.terminate();
+    child.kill('SIGTERM');
+  }
+});
