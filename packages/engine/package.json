@@ -1,0 +1,1 @@
+{"name":"@bluebird/chess-engine","version":"0.1.0","type":"module","main":"./src/index.ts","types":"./src/index.ts","scripts":{"test":"tsx --test src/*.test.ts"},"dependencies":{"chess.js":"^1.4.0"},"devDependencies":{"tsx":"^4.19.0","typescript":"^5.7.0"}}

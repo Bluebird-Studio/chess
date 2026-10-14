@@ -1,0 +1,5 @@
+{
+  "name":"@bluebird/chess","private":true,"type":"module","workspaces":["apps/*","packages/*"],
+  "scripts":{"dev":"npm run dev -w @bluebird/chess-web","dev:server":"npm run dev -w @bluebird/chess-server","build":"npm run build -w @bluebird/chess-web","test":"npm run test -w @bluebird/chess-engine"},
+  "engines":{"node":">=20"}
+}

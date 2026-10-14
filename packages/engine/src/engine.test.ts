@@ -1,0 +1,2 @@
+import { test } from 'node:test';import { strict as assert } from 'node:assert';import { Chess } from 'chess.js';import { selectBotMove } from './index.ts';
+for(const level of ['random','greedy','minimax'] as const){test(`${level} returns a legal move and preserves position`,()=>{const g=new Chess();const fen=g.fen();const move=selectBotMove(g,level);assert.ok(move);assert.ok(g.moves().includes(move.san));assert.equal(g.fen(),fen)})}
