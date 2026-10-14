@@ -39,5 +39,13 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   assert.equal((await whiteInbox(m=>m.type==='error')).message,'Invalid message');
   black.send(JSON.stringify({type:'move',from:'e7',to:'e5'}));
   assert.deepEqual((await whiteInbox(m=>m.type==='state'&&m.history.length===2)).history,['e4','e5']);
+  white.send(JSON.stringify({type:'resign'}));
+  assert.deepEqual(await blackInbox(m=>m.type==='result'),{type:'result',winner:'black',reason:'resignation'});
+  white.send(JSON.stringify({type:'move',from:'g1',to:'f3'}));
+  white.send(JSON.stringify({type:'rematch'}));
+  assert.equal((await blackInbox(m=>m.type==='rematch_requested')).color,'w');
+  black.send(JSON.stringify({type:'rematch'}));
+  assert.equal((await whiteInbox(m=>m.type==='state'&&m.rematch===true)).history.length,0);
+  assert.equal((await blackInbox(m=>m.type==='state'&&m.rematch===true)).gameOver,false);
  }finally{for(const ws of clients)ws.terminate();child.kill('SIGTERM')}
 });
