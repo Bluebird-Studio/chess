@@ -112,3 +112,8 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .move-entry input:focus-visible{outline:2px solid #c89859;outline-offset:2px}
 .move-entry input:disabled{opacity:.5}
 .move-entry small:empty{display:none}
+
+.candidate-preview { padding: 0 0 16px; border-bottom: 1px solid #ffffff24; }
+.candidate-preview .analysis-exports button[aria-pressed="true"] { background: #254b3e; color: #fff; border-color: #a6c596; }
+.candidate-preview small { margin-top: 12px; color: #a9bcae; }
+.candidate-preview-notice { margin: 0 0 12px; padding: 10px 14px; border-left: 3px solid #a6c596; background: #ffffff08; color: #d7edc9; line-height: 1.5; }
