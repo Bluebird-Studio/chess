@@ -150,6 +150,8 @@ test('reconnect restores the correct seat and rejects invalid tokens', { timeout
     white.send(JSON.stringify({ type: 'move', from: 'e2', to: 'e4' }));
     await readBlack(m => m.type === 'state' && m.history.length === 1);
 
+    white.send(JSON.stringify({ type: 'offer_draw' }));
+    await readBlack(m => m.type === 'draw_offered');
     black.close();
     await readWhite(m => m.type === 'opponent_disconnected');
 
@@ -166,9 +168,31 @@ test('reconnect restores the correct seat and rejects invalid tokens', { timeout
     const restored = await readRecovered(m => m.type === 'joined');
     assert.equal(restored.color, 'b');
     assert.equal(restored.reconnected, true);
-    assert.deepEqual((await readRecovered(m => m.type === 'state')).history, ['e4']);
+    const restoredState = await readRecovered(m => m.type === 'state');
+    assert.deepEqual(restoredState.history, ['e4']);
+    assert.equal(restoredState.drawOffer, 'w', 'disconnect must not reject a pending draw');
     recovered.send(JSON.stringify({ type: 'move', from: 'e7', to: 'e5' }));
-    assert.deepEqual((await readWhite(m => m.type === 'state' && m.history.length === 2)).history, ['e4', 'e5']);
+    const moved = await readWhite(m => m.type === 'state' && m.history.length === 2);
+    assert.deepEqual(moved.history, ['e4', 'e5']);
+    assert.equal(moved.drawOffer, undefined, 'a legal reply still declines the recovered offer');
+
+    recovered.send(JSON.stringify({ type: 'offer_draw' }));
+    await readWhite(m => m.type === 'draw_offered');
+    recovered.close();
+    await readWhite(m => m.type === 'opponent_disconnected');
+    white.send(JSON.stringify({ type: 'accept_draw' }));
+    assert.deepEqual(await readWhite(m => m.type === 'result'), {
+      type: 'result', winner: 'draw', reason: 'agreement'
+    });
+
+    const returned = await connect();
+    const readReturned = inbox(returned);
+    returned.send(JSON.stringify({ type: 'reconnect', roomId: created.roomId, token: joined.token }));
+    await readReturned(m => m.type === 'joined');
+    const finished = await readReturned(m => m.type === 'state');
+    assert.equal(finished.result, 'draw');
+    assert.equal(finished.reason, 'agreement');
+    assert.equal(finished.drawOffer, undefined);
   } finally {
     for (const ws of clients) ws.terminate();
     child.kill('SIGTERM');
