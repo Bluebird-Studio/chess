@@ -313,15 +313,32 @@ test('authoritative clocks start with both players, apply increments, and adjudi
     throw Error('Server did not start');
   }
   try {
-    const white = await connect();
-    const readWhite = inbox(white);
+    let white = await connect();
+    let readWhite = inbox(white);
     white.send(JSON.stringify({ type: 'create' }));
     const created = await readWhite(m => m.type === 'joined');
+    const lobby = await readWhite(m => m.type === 'state');
+    assert.deepEqual(lobby.clocks, { w: 1800, b: 1800 });
+    assert.equal(lobby.increment, 120);
+    assert.equal(lobby.activeClock, undefined);
+    assert.equal(lobby.gameOver, false);
+    assert.deepEqual(lobby.history, []);
+    await delay(300);
+    const recoveredHost = await connect();
+    const readRecoveredHost = inbox(recoveredHost);
+    recoveredHost.send(JSON.stringify({ type: 'reconnect', roomId: created.roomId, token: created.token }));
+    await readRecoveredHost(m => m.type === 'joined');
+    const recoveredLobby = await readRecoveredHost(m => m.type === 'state');
+    assert.deepEqual(recoveredLobby.clocks, lobby.clocks, 'lobby time is not charged');
+    assert.equal(recoveredLobby.activeClock, undefined);
+    // Continue the active-game assertions on the current host connection.
+    white = recoveredHost;
+    readWhite = readRecoveredHost;
     const black = await connect();
     const readBlack = inbox(black);
     black.send(JSON.stringify({ type: 'join', roomId: created.roomId }));
     await readBlack(m => m.type === 'joined');
-    const start = await readWhite(m => m.type === 'state');
+    const start = await readWhite(m => m.type === 'state' && m.activeClock === 'w');
     assert.equal(start.activeClock, 'w');
     assert.ok(start.clocks.w >= 1700 && start.clocks.w <= 1800);
     assert.ok(start.clocks.b >= 1700 && start.clocks.b <= 1800);
@@ -693,7 +710,7 @@ for (const jump of [-60_000, 60_000]) {
       const black = await connect(), readBlack = inbox(black);
       black.send(JSON.stringify({ type: 'join', roomId: created.roomId }));
       await readBlack(m => m.type === 'joined');
-      const initial = await readWhite(m => m.type === 'state');
+      const initial = await readWhite(m => m.type === 'state' && m.activeClock === 'w');
       assert.ok(initial.clocks.w > 0 && initial.clocks.w <= 5000);
       const ticking = await readWhite(m => m.type === 'state' && m.clocks.w < initial.clocks.w);
       assert.equal(ticking.gameOver, false, 'clock adjustments must not cause a timeout');
@@ -741,7 +758,7 @@ test('invalid timing settings preserve finite ticking clocks and connected seats
     const black = await connect(), readBlack = inbox(black);
     black.send(JSON.stringify({ type: 'join', roomId: created.roomId }));
     await readBlack(m => m.type === 'joined');
-    const initial = await readWhite(m => m.type === 'state');
+    const initial = await readWhite(m => m.type === 'state' && m.activeClock === 'w');
     assert.equal(typeof initial.clocks.w, 'number');
     assert.ok(initial.clocks.w > 0 && initial.clocks.w <= 300_000);
     assert.equal(initial.clocks.b, 300_000);
