@@ -165,6 +165,13 @@ wss.on('connection', ws => {
       const color = room?.players.get(ws);
       if (!room || !color) return;
 
+      // A reserved white seat is a lobby, not an active game. Reject every
+      // gameplay action until the opponent joins so the invite stays playable.
+      if (!room.tokens.w || !room.tokens.b) {
+        send(ws, { type: 'error', message: 'Waiting for an opponent' });
+        return;
+      }
+
       if (msg.type === 'resign') {
         if (settleClock(room)) return;
         if (room.result || room.game.isGameOver()) return;
@@ -224,10 +231,6 @@ wss.on('connection', ws => {
         return;
       }
       if (msg.type === 'move') {
-        if (!room.tokens.w || !room.tokens.b) {
-          send(ws, { type: 'error', message: 'Waiting for an opponent' });
-          return;
-        }
         if (settleClock(room)) return;
         if (room.result || room.game.isGameOver() || color !== room.game.turn()) return;
         const from = msg.from as Square, to = msg.to as Square;

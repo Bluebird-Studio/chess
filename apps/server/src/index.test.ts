@@ -248,7 +248,7 @@ test('authoritative clocks start with both players, apply increments, and adjudi
   }
 });
 
-test('waiting rooms reject moves and reconnect without starting the clock', { timeout: 15000 }, async () => {
+test('waiting rooms reject gameplay actions and reconnect without starting the clock', { timeout: 15000 }, async () => {
   const port = 28000 + Math.floor(Math.random() * 2000);
   const child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
     cwd: serverDir, env: { ...process.env, PORT: String(port), CLOCK_BASE_MS: '1000' }, stdio: 'pipe'
@@ -273,8 +273,14 @@ test('waiting rooms reject moves and reconnect without starting the clock', { ti
     const readHost = inbox(host);
     host.send(JSON.stringify({ type: 'create' }));
     const created = await readHost(m => m.type === 'joined');
-    host.send(JSON.stringify({ type: 'move', from: 'e2', to: 'e4' }));
-    assert.equal((await readHost(m => m.type === 'error')).message, 'Waiting for an opponent');
+    for (const action of [
+      { type: 'move', from: 'e2', to: 'e4' },
+      { type: 'resign' }, { type: 'offer_draw' }, { type: 'accept_draw' },
+      { type: 'decline_draw' }, { type: 'rematch' }
+    ]) {
+      host.send(JSON.stringify(action));
+      assert.equal((await readHost(m => m.type === 'error')).message, 'Waiting for an opponent');
+    }
 
     const recovered = await connect();
     const readRecovered = inbox(recovered);
@@ -284,6 +290,9 @@ test('waiting rooms reject moves and reconnect without starting the clock', { ti
     assert.deepEqual(waiting.history, []);
     assert.deepEqual(waiting.clocks, { w: 1000, b: 1000 });
     assert.equal(waiting.activeClock, undefined);
+    assert.equal(waiting.gameOver, false);
+    assert.equal(waiting.result, undefined);
+    assert.equal(waiting.drawOffer, undefined);
     // Waiting longer than the time control must not forfeit an unstarted game.
     await delay(1200);
     const black = await connect();
@@ -292,6 +301,7 @@ test('waiting rooms reject moves and reconnect without starting the clock', { ti
     await readBlack(m => m.type === 'joined');
     const started = await readBlack(m => m.type === 'state');
     assert.equal(started.gameOver, false);
+    assert.equal(started.drawOffer, undefined);
     assert.equal(started.activeClock, 'w');
     assert.ok(started.clocks.w > 900);
     assert.equal(started.clocks.b, 1000);
