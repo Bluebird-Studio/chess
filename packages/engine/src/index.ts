@@ -55,13 +55,14 @@ function plainMinimax(game: Chess, depth: number, ply: number): number {
 interface SearchContext {
   nodes: number;
   maxNodes: number;
+  // Monotonic milliseconds, shared by root search and quiescence.
   deadline: number;
   table: Map<string, { depth: number; score: number }>;
 }
 // Resolve short forcing exchanges before evaluating material. Checks require a
 // legal evasion rather than a stand-pat score; the shared budget bounds all work.
 function quiescence(game: Chess, alpha: number, beta: number, ply: number, remaining: number, ctx: SearchContext): number {
-  if (++ctx.nodes > ctx.maxNodes || Date.now() >= ctx.deadline) throw ABORT;
+  if (++ctx.nodes > ctx.maxNodes || performance.now() >= ctx.deadline) throw ABORT;
   const terminal = terminalScore(game, ply);
   if (terminal !== null) return terminal;
   const maximizing = game.turn() === 'w';
@@ -86,7 +87,7 @@ function quiescence(game: Chess, alpha: number, beta: number, ply: number, remai
 }
 
 function alphaBeta(game: Chess, depth: number, alpha: number, beta: number, ply: number, ctx: SearchContext): number {
-  if (++ctx.nodes > ctx.maxNodes || Date.now() >= ctx.deadline) throw ABORT;
+  if (++ctx.nodes > ctx.maxNodes || performance.now() >= ctx.deadline) throw ABORT;
   const terminal = terminalScore(game, ply);
   if (terminal !== null) return terminal;
   if (depth === 0) return quiescence(game, alpha, beta, ply, 6, ctx);
@@ -152,7 +153,7 @@ export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits
   const ctx: SearchContext = {
     nodes: 0,
     maxNodes: Math.max(100, limits.maxNodes ?? 8000),
-    deadline: Date.now() + Math.max(50, limits.maxTimeMs ?? 650),
+    deadline: performance.now() + Math.max(50, limits.maxTimeMs ?? 650),
     table: new Map()
   };
   const maximizing = game.turn() === 'w';
@@ -161,7 +162,7 @@ export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits
     let candidate = best, scoreBest = maximizing ? -Infinity : Infinity;
     try {
       for (const move of moves) {
-        if (Date.now() >= ctx.deadline) throw ABORT;
+        if (performance.now() >= ctx.deadline) throw ABORT;
         game.move(move);
         let score: number;
         try { score = alphaBeta(game, depth - 1, -Infinity, Infinity, 1, ctx); }
