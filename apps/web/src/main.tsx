@@ -4,6 +4,7 @@ import { Chess, type PieceSymbol, type Square } from 'chess.js';
 import { RotateCcw, Undo2, Crown, ArrowLeftRight, Volume2, VolumeX, Flag, Handshake, Copy, Wifi, WifiOff } from 'lucide-react';
 import { selectBotMove, type BotLevel } from '@bluebird/chess-engine';
 import { restoreOnlineGame } from './online-game';
+import { remaining, switchClock, formatClock, type ClockState } from './clock';
 import './style.css';
 
 const glyphs: Record<string, string> = {
@@ -26,6 +27,10 @@ function copyGame(game: Chess): Chess {
   return next;
 }
 function App() {
+  const [timeControl, setTimeControl] = useState(0);
+  const [clock, setClock] = useState<ClockState | null>(null);
+  const clockHistory = useRef<ClockState[]>([]);
+  const [now, setNow] = useState(Date.now);
   const [game, setGame] = useState(() => new Chess());
   const [selected, setSelected] = useState<Square | null>(null);
   const [flipped, setFlipped] = useState(false);
@@ -44,8 +49,10 @@ function App() {
 
   const history = game.history({ verbose: true });
   const lastMove = history.at(-1);
-  const botTurn = mode === 'bot' && game.turn() === 'b' && !game.isGameOver() && !result;
-  const canInteract = !botTurn && !game.isGameOver() && !result && !promotion && (mode !== 'online' || (connection === 'connected' && onlineColor === game.turn()));
+  const clockValues = clock ? remaining(clock, now) : null;
+  const timedOut = clockValues && clockValues[game.turn()] === 0;
+  const botTurn = mode === 'bot' && game.turn() === 'b' && !game.isGameOver() && !result && !timedOut;
+  const canInteract = !timedOut && !botTurn && !game.isGameOver() && !result && !promotion && (mode !== 'online' || (connection === 'connected' && onlineColor === game.turn()));
   const legal = useMemo(() => selected ? game.moves({ square: selected, verbose: true }).map(m => m.to) : [], [game, selected]);
   const squares = Array.from({length: 64}, (_, i) => {
     const rank = flipped ? Math.floor(i / 8) + 1 : 8 - Math.floor(i / 8);
@@ -57,6 +64,24 @@ function App() {
     : game.isDraw() ? 'Game drawn'
     : game.isCheck() ? `Check · ${game.turn() === 'w' ? 'White' : 'Black'} to move`
     : `${game.turn() === 'w' ? 'White' : 'Black'} to move`);
+
+  useEffect(() => {
+    if (!clock || result || game.isGameOver()) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 100);
+    return () => window.clearInterval(timer);
+  }, [clock, result, game]);
+  useEffect(() => {
+    if (timedOut && !result) setResult(`${game.turn() === 'w' ? 'Black' : 'White'} wins · time expired`);
+  }, [timedOut, result, game]);
+  function advanceClock() {
+    if (!timeControl || mode === 'online') return;
+    const timestamp = Date.now();
+    const current = clock ?? { w: timeControl, b: timeControl, active: game.turn(), since: timestamp };
+    if (remaining(current, timestamp)[game.turn()] === 0) { setNow(timestamp); return false; }
+    clockHistory.current.push({ ...remaining(current, timestamp), active: current.active, since: timestamp });
+    setClock(switchClock(current, timestamp)); setNow(timestamp);
+    return true;
+  }
 
   function playSound() {
     if (!sound) return;
@@ -80,7 +105,7 @@ function App() {
     const id = window.setTimeout(() => {
       const next = copyGame(game);
       const move = selectBotMove(next, level);
-      if (move) next.move(move);
+      if (move) { if (advanceClock() === false) return; next.move(move); }
       setGame(next);
       playSound();
     }, 300);
@@ -135,6 +160,7 @@ function App() {
 
   function reset() {
     if (mode === 'online' || roomId) { const previous = socketRef.current; socketRef.current = null; previous?.close(); setRoomId(null); setOnlineColor(null); setConnection('offline'); setOnlineNotice('Create a room or enter an invite code to play online.'); }
+    setClock(null); clockHistory.current = [];
     setGame(new Chess());
     setSelected(null);
     setPromotion(null);
@@ -144,7 +170,9 @@ function App() {
     if (botTurn || !history.length) return;
     const next = copyGame(game);
     next.undo();
-    if (mode === 'bot' && next.history().length > 0) next.undo();
+    let restoredClock = clockHistory.current.pop();
+    if (mode === 'bot' && next.history().length > 0) { next.undo(); restoredClock = clockHistory.current.pop(); }
+    setClock(restoredClock ? { ...restoredClock, since: Date.now() } : null); setNow(Date.now());
     setGame(next);
     setSelected(null);
     setPromotion(null);
@@ -158,6 +186,7 @@ function App() {
     const next = copyGame(game);
     try { next.move({ from, to, promotion: piece }); }
     catch { return; }
+    if (advanceClock() === false) return;
     setGame(next);
     setSelected(null);
     setPromotion(null);
@@ -201,7 +230,7 @@ function App() {
     return <div className={`player ${game.turn() === color && !result && !game.isGameOver() ? 'to-move' : ''}`}>
       <span className={`avatar ${color === 'w' ? 'light-avatar' : 'dark'}`}>{color === 'w' ? '♔' : '♚'}</span>
       <div><b>{isBot ? levels.find(x => x.id === level)?.name : isYou ? `You · ${name}` : `${name} pieces`}</b><small>{isBot ? 'Computer opponent' : isYou || (mode === 'bot' && color === 'w') ? 'You' : mode === 'online' ? 'Online opponent' : 'Local player'}</small></div>
-      <span className="player-side">{name.toUpperCase()}</span>
+      {mode !== 'online' && timeControl > 0 ? <span className={`clock ${clockValues && clockValues[color] < 30000 ? 'low-time' : ''}`} aria-label={`${name} time remaining`}>{formatClock(clockValues?.[color] ?? timeControl)}</span> : <span className="player-side">{name.toUpperCase()}</span>}
     </div>;
   }
   const checkedKing = game.isCheck()
@@ -262,6 +291,7 @@ function App() {
             <select id="bot" value={level} onChange={e => { setLevel(e.target.value as BotLevel); reset(); }}>{levels.map(l => <option value={l.id} key={l.id}>{l.name}</option>)}</select>
             <small>{levels.find(l => l.id === level)?.description}</small>
           </div>}
+          {mode !== 'online' && <div className="bot-select"><label htmlFor="time-control">TIME PER PLAYER</label><select id="time-control" value={timeControl} onChange={e => { reset(); setTimeControl(Number(e.target.value)); }}><option value={0}>Untimed · take your time</option><option value={300000}>5 minutes · blitz</option><option value={600000}>10 minutes · rapid</option></select><small>{clock ? 'Clock running. Each move starts your opponent’s time.' : 'The clock starts after White’s first move.'}</small></div>}
           <div className="status" role="status" aria-live="polite"><span className="status-dot"/><span>{botTurn ? 'Computer is thinking…' : status}</span></div>
           <div className="actions">
             <button onClick={undo} disabled={!history.length || botTurn || mode === 'online'}><Undo2 size={17}/> Undo</button>
