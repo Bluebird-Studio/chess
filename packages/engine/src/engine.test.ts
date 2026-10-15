@@ -264,3 +264,29 @@ for (const level of ['minimax', 'alphabeta'] as const) {
     });
   }
 }
+
+for (const [color, fen] of [
+  ['white', '4k3/P6n/8/8/8/8/8/4K2R w - - 0 1'],
+  ['black', '4k2r/8/8/8/8/8/p6N/4K3 b - - 0 1']
+]) {
+  test(`greedy prefers queen promotion over a knight capture for ${color}`, () => {
+    const game = new Chess(fen);
+    const history = game.history();
+    assert.ok(game.moves({ verbose: true }).some(move => move.captured === 'n'));
+    const move = selectBotMove(game, 'greedy');
+    assert.ok(move);
+    assert.equal(move.promotion, 'q');
+    assert.equal(game.fen(), fen);
+    assert.deepEqual(game.history(), history);
+  });
+}
+
+test('greedy includes both captured material and promotion gain', () => {
+  const game = new Chess('1r2k3/P7/8/8/8/8/8/4K2R w - - 0 1');
+  const move = selectBotMove(game, 'greedy');
+  assert.ok(move);
+  assert.equal(move.to, 'b8');
+  assert.equal(move.captured, 'r');
+  assert.equal(move.promotion, 'q');
+  assert.equal(game.fen(), '1r2k3/P7/8/8/8/8/8/4K2R w - - 0 1');
+});
