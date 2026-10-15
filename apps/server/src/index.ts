@@ -23,6 +23,25 @@ const wss = new WebSocketServer({ port: Number(process.env.PORT || 8080) });
 const IDLE_ROOM_MS = 10 * 60_000;
 const CLOCK_BASE_MS = Math.max(1_000, Number(process.env.CLOCK_BASE_MS) || 5 * 60_000);
 const CLOCK_INCREMENT_MS = Math.max(0, Number(process.env.CLOCK_INCREMENT_MS) || 0);
+const HEARTBEAT_MS = Math.max(100, Number(process.env.HEARTBEAT_MS) || 30_000);
+
+// TCP can stay open after a sleeping device or network loss. Reap silent
+// sockets so opponents receive a disconnect and the seat remains reclaimable.
+const awaitingPong = new Set<WebSocket>();
+const heartbeat = setInterval(() => {
+  for (const ws of wss.clients) {
+    if (awaitingPong.has(ws)) {
+      ws.terminate();
+      continue;
+    }
+    if (ws.readyState === WebSocket.OPEN) {
+      awaitingPong.add(ws);
+      ws.ping();
+    }
+  }
+}, HEARTBEAT_MS);
+heartbeat.unref();
+wss.on('close', () => clearInterval(heartbeat));
 
 function send(ws: WebSocket, data: unknown) {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
@@ -101,6 +120,9 @@ function roomCode(): string {
 
 wss.on('connection', ws => {
   let roomId: string | undefined;
+  ws.on('pong', () => awaitingPong.delete(ws));
+  // Transport failures must close this connection rather than crash all rooms.
+  ws.on('error', () => ws.terminate());
 
   ws.on('message', raw => {
     try {
@@ -258,6 +280,7 @@ wss.on('connection', ws => {
   });
 
   ws.on('close', () => {
+    awaitingPong.delete(ws);
     if (!roomId) return;
     const room = rooms.get(roomId);
     if (!room || !room.players.has(ws)) return;
