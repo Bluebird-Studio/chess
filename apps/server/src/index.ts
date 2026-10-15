@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { Chess, type Square } from 'chess.js';
 import { randomUUID } from 'node:crypto';
+import { timeoutResult } from './timeout.js';
 
 type Color = 'w' | 'b';
 type Room = {
@@ -83,7 +84,7 @@ function settleClock(room: Room): boolean {
     return false;
   }
   room.remaining[active] = 0;
-  room.result = room.game.isInsufficientMaterial() ? 'draw' : active === 'w' ? 'black' : 'white';
+  room.result = timeoutResult(room.game);
   room.reason = room.result === 'draw' ? 'timeout_insufficient_material' : 'timeout';
   room.drawOffer = undefined;
   stopClock(room);
