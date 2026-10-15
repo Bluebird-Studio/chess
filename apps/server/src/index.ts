@@ -261,7 +261,8 @@ wss.on('connection', ws => {
     room.players.delete(ws);
     // Clocks keep running while a player reconnects; the active side remains charged.
     room.rematch.clear();
-    room.drawOffer = undefined;
+    // A connection loss is not a draw rejection. Keep the offer in authoritative
+    // state so either seat can recover it and the opponent can still accept.
     broadcast(room, { type: 'opponent_disconnected' });
     scheduleExpiry(roomId, room);
   });
