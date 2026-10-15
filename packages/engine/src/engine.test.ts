@@ -64,3 +64,22 @@ test('all bots preserve a repetition draw and its move history', () => {
     assert.ok(game.isThreefoldRepetition());
   }
 });
+
+for (const level of levels.filter(level => level !== 'random')) {
+  for (const [scenario, fen] of [
+    ['white mate instead of a queen capture', '7k/5Q2/6K1/8/8/8/q7/R7 w - - 0 1'],
+    ['black mate instead of a queen capture', 'r7/Q7/8/8/8/6k1/5q2/7K b - - 0 1'],
+    ['promotion mate', '7k/5P1p/5K2/8/8/8/8/8 w - - 0 1']
+  ]) {
+    test(`${level} takes ${scenario} with minimal requested search limits`, () => {
+      const game = new Chess(fen);
+      const history = game.history();
+      const move = selectBotMove(game, level, { maxNodes: 1, maxTimeMs: 1 });
+      assert.ok(move);
+      assert.equal(game.fen(), fen);
+      assert.deepEqual(game.history(), history);
+      game.move(move);
+      assert.ok(game.isCheckmate(), move.san);
+    });
+  }
+}
