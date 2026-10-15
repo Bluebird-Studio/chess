@@ -5,6 +5,7 @@ import { RotateCcw, Undo2, Crown, ArrowLeftRight, Volume2, VolumeX, Flag, Handsh
 import { selectBotMove, type BotLevel } from '@bluebird/chess-engine';
 import { restoreOnlineGame } from './online-game';
 import { remaining, switchClock, formatClock, type ClockState } from './clock';
+import { squareAtPoint } from './board-input';
 import './style.css';
 
 const glyphs: Record<string, string> = {
@@ -48,6 +49,14 @@ function App() {
   const [drawOffer, setDrawOffer] = useState<'w' | 'b' | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  const touchRef = useRef<{ id: number; from: Square; x: number; y: number; dragging: boolean } | null>(null);
+  const suppressClickUntil = useRef(0);
+  const [touchDrag, setTouchDrag] = useState<{ from: Square; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    touchRef.current = null; setTouchDrag(null);
+  }, [game, mode, flipped, result, connection]);
   const onlineFen = useRef<string | null>(null);
 
   const history = game.history({ verbose: true });
@@ -223,6 +232,35 @@ function App() {
     const from = event.dataTransfer.getData('text/plain') as Square;
     if (from && /^[a-h][1-8]$/.test(from)) attemptMove(from, to);
   }
+  function touchStart(event: React.PointerEvent<HTMLButtonElement>, from: Square) {
+    if (event.pointerType === 'mouse' || !canInteract || game.get(from)?.color !== game.turn()) return;
+    touchRef.current = { id: event.pointerId, from, x: event.clientX, y: event.clientY, dragging: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+  function touchMove(event: React.PointerEvent<HTMLButtonElement>) {
+    const touch = touchRef.current;
+    if (!touch || touch.id !== event.pointerId) return;
+    if (!touch.dragging && Math.hypot(event.clientX - touch.x, event.clientY - touch.y) < 8) return;
+    touch.dragging = true;
+    setSelected(touch.from);
+    setTouchDrag({ from: touch.from, x: event.clientX, y: event.clientY });
+  }
+  function touchEnd(event: React.PointerEvent<HTMLButtonElement>, cancelled = false) {
+    const touch = touchRef.current;
+    if (!touch || touch.id !== event.pointerId) return;
+    touchRef.current = null; setTouchDrag(null);
+    if (!touch.dragging) return;
+    suppressClickUntil.current = Date.now() + 500;
+    if (cancelled) return;
+    const board = boardRef.current;
+    if (!board) return;
+    const rect = board.getBoundingClientRect();
+    const to = squareAtPoint(event.clientX, event.clientY, {
+      left: rect.left + board.clientLeft, top: rect.top + board.clientTop,
+      width: board.clientWidth, height: board.clientHeight,
+    }, flipped);
+    if (to) attemptMove(touch.from, to);
+  }
   function onBoardKey(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
     const step = ({ ArrowLeft:-1, ArrowRight:1, ArrowUp:-8, ArrowDown:8 } as Record<string, number>)[event.key];
     if (step === undefined) return;
@@ -256,7 +294,7 @@ function App() {
         <h1>Make your <em>move.</em></h1>
         <p className="lead">A timeless game. A beautiful place to play.</p>
         {renderPlayer(flipped ? 'w' : 'b')}
-        <div className="board" role="group" aria-label="Chessboard. Select a piece, then its destination. Arrow keys move focus.">
+        <div ref={boardRef} className="board" role="group" aria-label="Chessboard. Select a piece, then its destination. Arrow keys move focus.">
           {squares.map((sq, i) => {
             const piece = game.get(sq);
             const isLight = (files.indexOf(sq[0]) + Number(sq[1])) % 2 === 0;
@@ -266,11 +304,12 @@ function App() {
             const check = checkedKing === sq;
             return <button type="button" key={sq}
               aria-label={`${sq}, ${piece ? `${piece.color === 'w' ? 'white' : 'black'} ${({p:'pawn',n:'knight',b:'bishop',r:'rook',q:'queen',k:'king'} as Record<string,string>)[piece.type]}` : 'empty'}${target ? ', legal destination' : ''}${check ? ', king in check' : ''}`}
-              aria-pressed={active} onClick={() => click(sq)} onKeyDown={e => { if (e.key === 'Escape') setSelected(null); else onBoardKey(e, i); }}
+              aria-pressed={active} onClick={e => { if (e.detail === 0 || Date.now() >= suppressClickUntil.current) click(sq); }}
+              onPointerDown={e => touchStart(e, sq)} onPointerMove={touchMove} onPointerUp={e => touchEnd(e)} onPointerCancel={e => touchEnd(e, true)} onLostPointerCapture={e => touchEnd(e, true)} onKeyDown={e => { if (e.key === 'Escape') setSelected(null); else onBoardKey(e, i); }}
               draggable={canInteract && piece?.color === game.turn()}
               onDragStart={e => { setSelected(sq); e.dataTransfer.setData('text/plain', sq); e.dataTransfer.effectAllowed = 'move'; }}
               onDragOver={e => e.preventDefault()} onDrop={e => onDrop(e, sq)}
-              className={`square ${isLight ? 'light' : 'dark'} ${active ? 'active' : ''} ${target ? 'target' : ''} ${last ? 'last-move' : ''} ${check ? 'in-check' : ''}`}>
+              className={`square ${isLight ? 'light' : 'dark'} ${active ? 'active' : ''} ${target ? 'target' : ''} ${last ? 'last-move' : ''} ${check ? 'in-check' : ''} ${touchDrag?.from === sq ? 'touch-origin' : ''}`}>
               <span className={`piece ${piece?.color === 'w' ? 'white-piece' : 'black-piece'}`}>{piece ? glyphs[piece.color + piece.type] : ''}</span>
               {i % 8 === 0 && <span className="rank">{sq[1]}</span>}
               {Math.floor(i / 8) === 7 && <span className="file">{sq[0]}</span>}
@@ -323,6 +362,7 @@ function App() {
         <footer>BLUEBIRD STUDIO <span>EST. 2026</span></footer>
       </aside>
     </main>
+    {touchDrag && <span aria-hidden="true" className={`touch-piece piece ${game.get(touchDrag.from)?.color === 'w' ? 'white-piece' : 'black-piece'}`} style={{ left: touchDrag.x, top: touchDrag.y }}>{glyphs[(game.get(touchDrag.from)?.color ?? '') + (game.get(touchDrag.from)?.type ?? '')]}</span>}
     {promotion && <div className="modal-backdrop" onClick={() => setPromotion(null)}>
       <div className="promotion-dialog" role="dialog" aria-modal="true" aria-labelledby="promotion-title" onClick={e => e.stopPropagation()}>
         <span className="eyebrow">YOUR MOVE</span><h2 id="promotion-title">Choose a promotion</h2>

@@ -35,3 +35,7 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .clock{margin-left:auto;font-variant-numeric:tabular-nums;font-size:24px;font-weight:600;letter-spacing:.03em;background:#18231c;border:1px solid #ffffff14;border-radius:7px;padding:8px 13px;color:#9caf9e;min-width:95px;text-align:center}
 .to-move .clock{background:#dce4d6;color:#203128;border-color:#dce4d6}
 .clock.low-time{color:#ffb2a8;border-color:#b66f66}.to-move .clock.low-time{background:#693b35;color:#ffddd7}
+/* Touch pieces track the finger; empty squares still allow page scrolling. */
+.square[draggable="true"]{touch-action:none;user-select:none;-webkit-user-select:none}
+.square.touch-origin .piece{opacity:.25}
+.touch-piece{position:fixed;transform:translate(-50%,-65%);pointer-events:none;z-index:40;filter:drop-shadow(0 8px 6px #0006);font-size:clamp(34px,8vw,64px)}
