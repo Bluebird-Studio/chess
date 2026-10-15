@@ -1,5 +1,14 @@
 import { Chess, type Square } from 'chess.js';
 
+/** Bound file reads before parsing; accept PGN/FEN regardless of platform MIME type. */
+export async function readReplayFile(file: Pick<File, 'size' | 'text'>): Promise<ReturnType<typeof readReplay>> {
+  if (file.size > 1024 * 1024) throw new Error('Choose a PGN or FEN file smaller than 1 MB.');
+  let source: string;
+  try { source = await file.text(); }
+  catch { throw new Error('This file could not be opened. Try selecting it again or paste its contents below.'); }
+  return readReplay(source.replace(/^\uFEFF/, ''));
+}
+
 export function readReplay(source: string): { positions: string[]; moves: string[]; details: { from: Square; to: Square; label: string }[]; pgn: string } {
   const game = new Chess();
   const text = source.trim();

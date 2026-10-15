@@ -51,6 +51,9 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .replay-controls { display: flex; gap: 6px; align-items: center; margin: 16px 0; }
 .replay-controls span { flex: 1; text-align: center; font-size: 13px; }
 .analysis-tools { min-width: 0; }
+.analysis-tools input[type="file"] { display: block; width: 100%; min-width: 0; padding: 12px; border: 1px solid #70866b; border-radius: 7px; color: #e9eee9; background: #1f3027; font: inherit; margin-bottom: 8px; }
+.analysis-tools input[type="file"]::file-selector-button { border: 0; border-radius: 4px; background: #dce6d6; color: #273e34; padding: 8px 10px; margin-right: 10px; cursor: pointer; font: inherit; }
+.analysis-tools input[type="file"]:focus-visible { outline: 3px solid #f5da83; outline-offset: 3px; }
 .analysis-tools label { display: block; margin: 24px 0 8px; font-size: 11px; letter-spacing: 1px; font-weight: 700; }
 .analysis-tools textarea { display: block; width: 100%; min-height: 84px; resize: vertical; padding: 12px; border: 1px solid #d6d6cd; border-radius: 7px; background: #fafaf6; color: #273e34; font: 12px/1.6 monospace; margin-bottom: 10px; }
 .analysis-tools small { display: block; line-height: 1.6; color: #657067; }
