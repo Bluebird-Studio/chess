@@ -13,7 +13,9 @@ const files = 'abcdefgh';
 const levels: { id: BotLevel; name: string; description: string }[] = [
   { id:'random', name:'The Beginner', description:'An unpredictable first opponent' },
   { id:'greedy', name:'The Collector', description:'Loves winning material' },
+  { id:'positional', name:'The Strategist', description:'Evaluates material and piece placement' },
   { id:'minimax', name:'The Thinker', description:'Looks a few moves ahead' },
+  { id:'alphabeta', name:'The Tactician', description:'Bounded iterative alpha-beta search' },
 ];
 type Promotion = { from: Square; to: Square; color: 'w' | 'b' };
 const promotionPieces: PieceSymbol[] = ['q','r','b','n'];
