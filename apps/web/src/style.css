@@ -74,3 +74,6 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .lesson-copy progress::-webkit-progress-value { background: #a6c596; border-radius: 999px; }
 .lesson-copy progress::-moz-progress-bar { background: #a6c596; }
 .lesson-completed { display: block; margin-top: .5rem; font-size: .75rem; font-weight: 500; color: #a6c596; }
+
+.analysis-exports { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.replay-controls:focus-visible { outline: 2px solid #c89859; outline-offset: 5px; border-radius: 6px; }
