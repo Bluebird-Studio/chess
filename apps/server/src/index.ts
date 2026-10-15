@@ -66,6 +66,7 @@ function settleClock(room: Room): boolean {
   return true;
 }
 function startClock(room: Room) {
+  if (!room.tokens.w || !room.tokens.b) return;
   if (room.turnStartedAt !== undefined || room.result || room.game.isGameOver()) return;
   room.turnStartedAt = Date.now();
   room.clockInterval = setInterval(() => {
@@ -217,6 +218,10 @@ wss.on('connection', ws => {
         return;
       }
       if (msg.type === 'move') {
+        if (!room.tokens.w || !room.tokens.b) {
+          send(ws, { type: 'error', message: 'Waiting for an opponent' });
+          return;
+        }
         if (settleClock(room)) return;
         if (room.result || room.game.isGameOver() || color !== room.game.turn()) return;
         const from = msg.from as Square, to = msg.to as Square;
