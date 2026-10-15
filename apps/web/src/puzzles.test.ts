@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Chess, type Square } from 'chess.js';
-import { puzzles, tryPuzzleMove } from './puzzles';
+import { puzzles, puzzleSolution, tryPuzzleMove } from './puzzles';
 
 test('original lessons start legal and every advertised solution is checkmate', () => {
   for (const puzzle of puzzles) {
@@ -26,4 +26,16 @@ test('lessons cover both solving sides and reject legal nonmates for each exerci
     assert.ok(wrong, puzzle.title);
     assert.equal(tryPuzzleMove(puzzle.fen, wrong.from, wrong.to)?.solved, false, puzzle.title);
   }
+});
+
+test('revealed solutions provide matching notation and coordinates without changing exercises', () => {
+  for (const puzzle of puzzles) {
+    const before = JSON.stringify(puzzle);
+    const answer = puzzleSolution(puzzle);
+    assert.equal(answer.from + answer.to, puzzle.solution);
+    assert.ok(answer.san.endsWith('#'));
+    assert.equal(new Chess(answer.fen).isCheckmate(), true);
+    assert.equal(JSON.stringify(puzzle), before);
+  }
+  assert.throws(() => puzzleSolution({ ...puzzles[0], solution: 'g6g5' }), /must be checkmate/);
 });
