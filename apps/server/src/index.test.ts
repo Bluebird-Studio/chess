@@ -135,6 +135,11 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   const mate=await play([['f2','f3'],['e7','e5'],['g2','g4'],['d8','h4']]);
   assert.equal(mate.gameOver,true);assert.equal(mate.result,'black');
   assert.equal(mate.reason,'checkmate');assert.equal(mate.activeClock,undefined);
+  for (const read of [recoveredInbox, blackInbox]) {
+   assert.deepEqual(await read(m=>m.type==='result'),{type:'result',winner:'black',reason:'checkmate'});
+  }
+  recovered.send(JSON.stringify({type:'move',from:'a2',to:'a3'}));
+  assert.equal((await recoveredInbox(m=>m.type==='error')).message,'Game is over');
   await rematch();
   const repetition=await play([
    ['g1','f3'],['g8','f6'],['f3','g1'],['f6','g8'],
@@ -142,6 +147,9 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   ]);
   assert.equal(repetition.gameOver,true);assert.equal(repetition.result,'draw');
   assert.equal(repetition.reason,'threefold_repetition');assert.equal(repetition.activeClock,undefined);
+  for (const read of [recoveredInbox, blackInbox]) {
+   assert.deepEqual(await read(m=>m.type==='result'),{type:'result',winner:'draw',reason:'threefold_repetition'});
+  }
 
   await rematch();
   await play([
