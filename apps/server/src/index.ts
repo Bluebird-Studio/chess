@@ -3,6 +3,7 @@ import { Chess, type Square } from 'chess.js';
 import { randomUUID } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { timeoutResult } from './timeout.js';
+import { timingConfig } from './timing-config.js';
 
 type Color = 'w' | 'b';
 type Room = {
@@ -26,9 +27,7 @@ const rooms = new Map<string, Room>();
 // before JSON parsing so one peer cannot exhaust memory across active rooms.
 const wss = new WebSocketServer({ port: Number(process.env.PORT || 8080), maxPayload: 4096 });
 const IDLE_ROOM_MS = 10 * 60_000;
-const CLOCK_BASE_MS = Math.max(1_000, Number(process.env.CLOCK_BASE_MS) || 5 * 60_000);
-const CLOCK_INCREMENT_MS = Math.max(0, Number(process.env.CLOCK_INCREMENT_MS) || 0);
-const HEARTBEAT_MS = Math.max(100, Number(process.env.HEARTBEAT_MS) || 30_000);
+const { baseMs: CLOCK_BASE_MS, incrementMs: CLOCK_INCREMENT_MS, heartbeatMs: HEARTBEAT_MS } = timingConfig(process.env);
 
 // TCP can stay open after a sleeping device or network loss. Reap silent
 // sockets so opponents receive a disconnect and the seat remains reclaimable.

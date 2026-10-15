@@ -711,3 +711,52 @@ for (const jump of [-60_000, 60_000]) {
     }
   });
 }
+
+test('invalid timing settings preserve finite ticking clocks and connected seats', { timeout: 15000 }, async () => {
+  const port = 35000 + Math.floor(Math.random() * 2000);
+  const child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
+    cwd: serverDir,
+    env: { ...process.env, PORT: String(port), CLOCK_BASE_MS: 'Infinity', CLOCK_INCREMENT_MS: 'Infinity', HEARTBEAT_MS: '2147483648' },
+    stdio: 'pipe'
+  });
+  const clients: WebSocket[] = [];
+  async function connect() {
+    for (let i = 0; i < 50; i++) {
+      try {
+        const ws = await new Promise<WebSocket>((resolve, reject) => {
+          const socket = new WebSocket('ws://127.0.0.1:' + port);
+          socket.once('open', () => resolve(socket));
+          socket.once('error', reject);
+        });
+        clients.push(ws);
+        return ws;
+      } catch { await delay(100); }
+    }
+    throw Error('Server did not start');
+  }
+  try {
+    const white = await connect(), readWhite = inbox(white);
+    white.send(JSON.stringify({ type: 'create' }));
+    const created = await readWhite(m => m.type === 'joined');
+    const black = await connect(), readBlack = inbox(black);
+    black.send(JSON.stringify({ type: 'join', roomId: created.roomId }));
+    await readBlack(m => m.type === 'joined');
+    const initial = await readWhite(m => m.type === 'state');
+    assert.equal(typeof initial.clocks.w, 'number');
+    assert.ok(initial.clocks.w > 0 && initial.clocks.w <= 300_000);
+    assert.equal(initial.clocks.b, 300_000);
+    assert.equal(initial.increment, 0);
+    const ticking = await readWhite(m => m.type === 'state' && m.clocks.w < initial.clocks.w);
+    assert.ok(ticking.clocks.w > 0);
+    white.send(JSON.stringify({ type: 'move', from: 'e2', to: 'e4' }));
+    const moved = await readBlack(m => m.type === 'state' && m.history.length === 1);
+    assert.equal(moved.activeClock, 'b');
+    assert.ok(moved.clocks.w > 0 && moved.clocks.w <= ticking.clocks.w);
+    assert.ok(moved.clocks.b > 0 && moved.clocks.b <= 300_000);
+    assert.equal(white.readyState, WebSocket.OPEN);
+    assert.equal(black.readyState, WebSocket.OPEN);
+  } finally {
+    for (const ws of clients) ws.terminate();
+    child.kill('SIGTERM');
+  }
+});
