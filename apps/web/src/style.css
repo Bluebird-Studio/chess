@@ -65,3 +65,6 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .analysis-workspace button:focus-visible, .analysis-workspace textarea:focus-visible, .analyze-action:focus-visible { outline: 3px solid #f5da83; outline-offset: 3px; }
 .analyze-action:disabled { opacity: .45; cursor: default; }
 .analysis-tools .analysis-error { color: #ffc0b8; }
+.lesson-board button.square{padding:0;border:0;border-radius:0;cursor:pointer;position:relative}
+.lesson-board button.square:disabled{opacity:1;cursor:default}
+.lesson-copy h3{font-size:25px;margin:16px 0}.lesson-copy p{line-height:1.7;color:#c3d1c3}.lesson-copy small{margin-top:24px;color:#a9bcae}.lesson-copy .lesson-success{border-left:3px solid #b8d4a7;padding-left:16px;color:#d7edc9}
