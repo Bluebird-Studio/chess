@@ -519,3 +519,55 @@ test('returning seats receive accurate opponent presence after both players disc
     child.kill('SIGTERM');
   }
 });
+
+test('joining an offline host reports absence and recovers a playable game', { timeout: 15000 }, async () => {
+  const port = 34000 + Math.floor(Math.random() * 2000);
+  const child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
+    cwd: serverDir, env: { ...process.env, PORT: String(port) }, stdio: 'pipe'
+  });
+  const clients: WebSocket[] = [];
+  async function connect() {
+    for (let i = 0; i < 50; i++) {
+      try {
+        const ws = await new Promise<WebSocket>((resolve, reject) => {
+          const socket = new WebSocket('ws://127.0.0.1:' + port);
+          socket.once('open', () => resolve(socket));
+          socket.once('error', reject);
+        });
+        clients.push(ws);
+        return ws;
+      } catch { await delay(100); }
+    }
+    throw Error('Server did not start');
+  }
+  try {
+    const host = await connect(), readHost = inbox(host);
+    host.send(JSON.stringify({ type: 'create' }));
+    const created = await readHost(m => m.type === 'joined');
+    const closed = new Promise<void>(resolve => host.once('close', () => resolve()));
+    host.close();
+    await closed;
+
+    const guest = await connect(), readGuest = inbox(guest);
+    guest.send(JSON.stringify({ type: 'join', roomId: created.roomId }));
+    assert.equal((await readGuest(m => m.type === 'joined')).color, 'b');
+    const started = await readGuest(m => m.type === 'state');
+    assert.equal(started.activeClock, 'w', 'clocks run while the host reconnects');
+    assert.equal(started.gameOver, false);
+    await readGuest(m => m.type === 'opponent_disconnected');
+
+    const returningHost = await connect(), readReturningHost = inbox(returningHost);
+    returningHost.send(JSON.stringify({ type: 'reconnect', roomId: created.roomId, token: created.token }));
+    await readReturningHost(m => m.type === 'joined');
+    assert.equal((await readGuest(m => m.type === 'opponent_reconnected')).color, 'w');
+    returningHost.send(JSON.stringify({ type: 'move', from: 'e2', to: 'e4' }));
+    const moved = await readGuest(m => m.type === 'state' && m.history.length === 1);
+    assert.deepEqual(moved.history, ['e4']);
+    assert.equal(moved.activeClock, 'b');
+    guest.send(JSON.stringify({ type: 'move', from: 'e7', to: 'e5' }));
+    assert.deepEqual((await readReturningHost(m => m.type === 'state' && m.history.length === 2)).history, ['e4', 'e5']);
+  } finally {
+    for (const ws of clients) ws.terminate();
+    child.kill('SIGTERM');
+  }
+});

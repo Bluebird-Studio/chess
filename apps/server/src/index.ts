@@ -160,6 +160,10 @@ wss.on('connection', ws => {
         roomId = id;
         send(ws, { type: 'joined', roomId: id, color: 'b', token, fen: room.game.fen() });
         broadcast(room, state(room));
+        // The host's reserved seat can outlive its connection in the lobby.
+        if (![...room.players.values()].includes('w')) {
+          send(ws, { type: 'opponent_disconnected' });
+        }
         return;
       }
 
