@@ -37,10 +37,16 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   assert.deepEqual((await whiteInbox(m=>m.type==='state'&&m.history.length===1)).history,['e4']);
   assert.deepEqual((await blackInbox(m=>m.type==='state'&&m.history.length===1)).history,['e4']);
   white.send(JSON.stringify({type:'move',from:'d2',to:'d4'}));
+  assert.equal((await whiteInbox(m=>m.type==='error')).message,'Wait for your turn');
   white.send('{invalid-json');
   assert.equal((await whiteInbox(m=>m.type==='error')).message,'Invalid message');
+  black.send(JSON.stringify({type:'move',from:7,to:'e5'}));
+  assert.equal((await blackInbox(m=>m.type==='error')).message,'Invalid move');
+  black.send(JSON.stringify({type:'move',from:'e7',to:'e4'}));
+  assert.equal((await blackInbox(m=>m.type==='error')).message,'Illegal move');
   black.send(JSON.stringify({type:'move',from:'e7',to:'e5'}));
   assert.deepEqual((await whiteInbox(m=>m.type==='state'&&m.history.length===2)).history,['e4','e5']);
+  assert.deepEqual((await blackInbox(m=>m.type==='state'&&m.history.length===2)).history,['e4','e5']);
   white.send(JSON.stringify({type:'offer_draw'}));
   await blackInbox(m=>m.type==='draw_offered');
   white.send(JSON.stringify({type:'resign'}));
@@ -61,6 +67,7 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   // Read subsequent responses from the replaced seat.
   whiteInbox=resignedInbox;
   white.send(JSON.stringify({type:'move',from:'g1',to:'f3'}));
+  assert.equal((await whiteInbox(m=>m.type==='error')).message,'Game is over');
   white.send(JSON.stringify({type:'rematch'}));
   assert.equal((await blackInbox(m=>m.type==='rematch_requested')).color,'w');
   black.send(JSON.stringify({type:'rematch'}));
@@ -69,7 +76,7 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   white.send(JSON.stringify({type:'offer_draw'}));
   assert.deepEqual(await blackInbox(m=>m.type==='draw_offered'),{type:'draw_offered',color:'w'});
   white.send(JSON.stringify({type:'move',from:'e2',to:'e4'}));
-  const offered=await blackInbox(m=>m.type==='state'&&m.history.length===1);
+  const offered=await blackInbox(m=>m.type==='state'&&m.history.length===1&&m.drawOffer==='w');
   assert.equal(offered.drawOffer,'w','offering player may move without withdrawing the offer');
   black.send(JSON.stringify({type:'move',from:'e7',to:'e4'}));
   assert.equal((await blackInbox(m=>m.type==='error')).message,'Illegal move');

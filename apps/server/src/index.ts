@@ -272,9 +272,19 @@ wss.on('connection', ws => {
       }
       if (msg.type === 'move') {
         if (settleClock(room)) return;
-        if (room.result || room.game.isGameOver() || color !== room.game.turn()) return;
+        if (room.result || room.game.isGameOver()) {
+          send(ws, { type: 'error', message: 'Game is over' });
+          return;
+        }
+        if (color !== room.game.turn()) {
+          send(ws, { type: 'error', message: 'Wait for your turn' });
+          return;
+        }
         const from = msg.from as Square, to = msg.to as Square;
-        if (typeof from !== 'string' || typeof to !== 'string') return;
+        if (typeof from !== 'string' || typeof to !== 'string') {
+          send(ws, { type: 'error', message: 'Invalid move' });
+          return;
+        }
         try { room.game.move({ from, to, promotion: msg.promotion || 'q' }); }
         catch { send(ws, { type: 'error', message: 'Illegal move' }); return; }
         room.remaining[color] += room.increment;
