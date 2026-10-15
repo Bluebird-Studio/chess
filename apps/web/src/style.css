@@ -98,3 +98,7 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .board-preferences label{color:#b8cbb9;font-size:10px;font-weight:700;letter-spacing:.15em}
 .board-preferences select{padding:9px 12px;border:1px solid #637c68;border-radius:6px;background:#152019;color:#edf4eb;min-width:120px}
 .board-preferences small{grid-column:1 / -1;color:#a4b7a8;font-size:11px;line-height:1.6}
+
+.replay-playback { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; margin: .75rem 0; }
+.replay-playback label { font-size: .8rem; color: #a5b7a9; }
+.replay-playback select { max-width: 100%; }
