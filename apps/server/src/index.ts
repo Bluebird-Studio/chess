@@ -263,6 +263,9 @@ wss.on('connection', ws => {
         return;
       }
       if (msg.type === 'rematch') {
+        // A timer callback may be delayed past flag fall. Settle first so the
+        // first rematch click both publishes the result and records consent.
+        settleClock(room);
         if (!room.result && !room.game.isGameOver()) return;
         room.rematch.add(color);
         broadcast(room, { type: 'rematch_requested', color });
