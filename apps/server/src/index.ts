@@ -85,6 +85,7 @@ function settleClock(room: Room): boolean {
   room.remaining[active] = 0;
   room.result = room.game.isInsufficientMaterial() ? 'draw' : active === 'w' ? 'black' : 'white';
   room.reason = room.result === 'draw' ? 'timeout_insufficient_material' : 'timeout';
+  room.drawOffer = undefined;
   stopClock(room);
   broadcast(room, { type: 'result', winner: room.result, reason: room.reason });
   return true;
@@ -201,6 +202,7 @@ wss.on('connection', ws => {
         if (room.result || room.game.isGameOver()) return;
         room.result = color === 'w' ? 'black' : 'white';
         room.reason = 'resignation';
+        room.drawOffer = undefined;
         stopClock(room);
         broadcast(room, { type: 'result', winner: room.result, reason: room.reason });
         return;
@@ -229,6 +231,7 @@ wss.on('connection', ws => {
       }
       if (msg.type === 'decline_draw') {
         if (settleClock(room)) return;
+        if (room.result || room.game.isGameOver()) return;
         if (!room.drawOffer || room.drawOffer === color) {
           send(ws, { type: 'error', message: 'No opponent draw offer to decline' });
           return;
