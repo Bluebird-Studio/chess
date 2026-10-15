@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+const serverDir = fileURLToPath(new URL('..', import.meta.url));
 import { WebSocket } from 'ws';
 import { setTimeout as delay } from 'node:timers/promises';
 
@@ -14,7 +16,7 @@ function inbox(ws:WebSocket){
 }
 test('server synchronizes legal moves and enforces turn ownership', {timeout:15000}, async()=>{
  const port=19000+Math.floor(Math.random()*3000);
- const child=spawn(process.execPath,['--import','tsx','src/index.ts'],{cwd:process.cwd(),env:{...process.env,PORT:String(port)},stdio:'pipe'});
+ const child=spawn(process.execPath,['--import','tsx','src/index.ts'],{cwd:serverDir,env:{...process.env,PORT:String(port)},stdio:'pipe'});
  const clients:WebSocket[]=[];
  try{
   let white:WebSocket|undefined;
@@ -61,7 +63,7 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
 test('reconnect restores the correct seat and rejects invalid tokens', { timeout: 15000 }, async () => {
   const port = 22000 + Math.floor(Math.random() * 3000);
   const child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
-    cwd: process.cwd(), env: { ...process.env, PORT: String(port) }, stdio: 'pipe'
+    cwd: serverDir, env: { ...process.env, PORT: String(port) }, stdio: 'pipe'
   });
   const clients: WebSocket[] = [];
   async function connect() {
@@ -123,7 +125,7 @@ test('reconnect restores the correct seat and rejects invalid tokens', { timeout
 test('authoritative clocks start with both players, apply increments, and adjudicate timeout', { timeout: 15000 }, async () => {
   const port = 25000 + Math.floor(Math.random() * 2000);
   const child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
-    cwd: process.cwd(), env: { ...process.env, PORT: String(port), CLOCK_BASE_MS: '1800', CLOCK_INCREMENT_MS: '120' }, stdio: 'pipe'
+    cwd: serverDir, env: { ...process.env, PORT: String(port), CLOCK_BASE_MS: '1800', CLOCK_INCREMENT_MS: '120' }, stdio: 'pipe'
   });
   const clients: WebSocket[] = [];
   async function connect() {
@@ -163,6 +165,63 @@ test('authoritative clocks start with both players, apply increments, and adjudi
     const result = await readBlack(m => m.type === 'result' && m.reason === 'timeout');
     assert.equal(result.winner, 'white');
     assert.deepEqual(await readWhite(m => m.type === 'result' && m.reason === 'timeout'), result);
+  } finally {
+    for (const ws of clients) ws.terminate();
+    child.kill('SIGTERM');
+  }
+});
+
+test('waiting rooms reject moves and reconnect without starting the clock', { timeout: 15000 }, async () => {
+  const port = 28000 + Math.floor(Math.random() * 2000);
+  const child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
+    cwd: serverDir, env: { ...process.env, PORT: String(port), CLOCK_BASE_MS: '1000' }, stdio: 'pipe'
+  });
+  const clients: WebSocket[] = [];
+  async function connect() {
+    for (let i = 0; i < 50; i++) {
+      try {
+        const ws = await new Promise<WebSocket>((resolve, reject) => {
+          const socket = new WebSocket('ws://127.0.0.1:' + port);
+          socket.once('open', () => resolve(socket));
+          socket.once('error', reject);
+        });
+        clients.push(ws);
+        return ws;
+      } catch { await delay(100); }
+    }
+    throw Error('Server did not start');
+  }
+  try {
+    const host = await connect();
+    const readHost = inbox(host);
+    host.send(JSON.stringify({ type: 'create' }));
+    const created = await readHost(m => m.type === 'joined');
+    host.send(JSON.stringify({ type: 'move', from: 'e2', to: 'e4' }));
+    assert.equal((await readHost(m => m.type === 'error')).message, 'Waiting for an opponent');
+
+    const recovered = await connect();
+    const readRecovered = inbox(recovered);
+    recovered.send(JSON.stringify({ type: 'reconnect', roomId: created.roomId, token: created.token }));
+    await readRecovered(m => m.type === 'joined');
+    const waiting = await readRecovered(m => m.type === 'state');
+    assert.deepEqual(waiting.history, []);
+    assert.deepEqual(waiting.clocks, { w: 1000, b: 1000 });
+    assert.equal(waiting.activeClock, undefined);
+    // Waiting longer than the time control must not forfeit an unstarted game.
+    await delay(1200);
+    const black = await connect();
+    const readBlack = inbox(black);
+    black.send(JSON.stringify({ type: 'join', roomId: created.roomId }));
+    await readBlack(m => m.type === 'joined');
+    const started = await readBlack(m => m.type === 'state');
+    assert.equal(started.gameOver, false);
+    assert.equal(started.activeClock, 'w');
+    assert.ok(started.clocks.w > 900);
+    assert.equal(started.clocks.b, 1000);
+    recovered.send(JSON.stringify({ type: 'move', from: 'e2', to: 'e4' }));
+    const moved = await readBlack(m => m.type === 'state' && m.history.length === 1);
+    assert.deepEqual(moved.history, ['e4']);
+    assert.equal(moved.activeClock, 'b');
   } finally {
     for (const ws of clients) ws.terminate();
     child.kill('SIGTERM');
