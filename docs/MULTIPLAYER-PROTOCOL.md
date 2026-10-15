@@ -22,4 +22,4 @@ The server owns chess legality, turn order, result and room membership.
 - Disconnect notifications: `opponent_disconnected`, `opponent_reconnected`.
 - Invalid operations can produce `{"type":"error","message":"..."}`. A move from the wrong side is ignored.
 
-Frontend WebSocket integration is still pending. No persistent user accounts or games are stored.
+The frontend supports room play, reconnecting, server clocks and consensual draws. No persistent user accounts or games are stored.

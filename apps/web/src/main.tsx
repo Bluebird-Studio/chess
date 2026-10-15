@@ -44,13 +44,16 @@ function App() {
   const [onlineColor, setOnlineColor] = useState<'w' | 'b' | null>(null);
   const [connection, setConnection] = useState<'offline' | 'connecting' | 'connected' | 'disconnected'>('offline');
   const [onlineNotice, setOnlineNotice] = useState('');
+  const [onlineClocks, setOnlineClocks] = useState<{ w: number; b: number } | null>(null);
+  const [drawOffer, setDrawOffer] = useState<'w' | 'b' | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const onlineFen = useRef<string | null>(null);
 
   const history = game.history({ verbose: true });
   const lastMove = history.at(-1);
   const clockValues = clock ? remaining(clock, now) : null;
-  const timedOut = clockValues && clockValues[game.turn()] === 0;
+  const timedOut = mode !== 'online' && clockValues && clockValues[game.turn()] === 0;
   const botTurn = mode === 'bot' && game.turn() === 'b' && !game.isGameOver() && !result && !timedOut;
   const canInteract = !timedOut && !botTurn && !game.isGameOver() && !result && !promotion && (mode !== 'online' || (connection === 'connected' && onlineColor === game.turn()));
   const legal = useMemo(() => selected ? game.moves({ square: selected, verbose: true }).map(m => m.to) : [], [game, selected]);
@@ -132,6 +135,7 @@ function App() {
       try { data = JSON.parse(event.data); }
       catch { setOnlineNotice('The server sent an unreadable update. Reconnect to sync your game.'); return; }
       if (data.type === 'joined') {
+        setClock(null); setOnlineClocks(null); setDrawOffer(null);
         setFlipped(data.color === 'b');
         setRoomId(data.roomId); setOnlineColor(data.color); setConnection('connected');
         if (data.token) sessionStorage.setItem(`bluebird:${data.roomId}:${data.color}`, data.token);
@@ -139,10 +143,14 @@ function App() {
       } else if (data.type === 'state') {
         try { setGame(restoreOnlineGame(data.fen, data.history)); }
         catch { setOnlineNotice('Game sync failed. Reconnect to restore the position.'); return; }
-        setSelected(null); setPromotion(null);
+        setOnlineClocks(data.clocks ?? null); setDrawOffer(data.drawOffer ?? null);
+        if (onlineFen.current !== data.fen) { setSelected(null); setPromotion(null); }
+        onlineFen.current = data.fen;
         setResult(data.result ? `${data.result === 'draw' ? 'Draw' : `${data.result === 'white' ? 'White' : 'Black'} wins`}` : null);
         if (data.rematch) setOnlineNotice('Rematch started. White to move.');
-      } else if (data.type === 'result') setResult(`${data.winner === 'white' ? 'White' : 'Black'} wins · ${data.reason}`);
+      } else if (data.type === 'result') { setDrawOffer(null); setResult(data.winner === 'draw' ? `Draw · ${data.reason}` : `${data.winner === 'white' ? 'White' : 'Black'} wins · ${data.reason}`); }
+      else if (data.type === 'draw_offered') setDrawOffer(data.color);
+      else if (data.type === 'draw_declined') { setDrawOffer(null); setOnlineNotice('Draw offer declined.'); }
       else if (data.type === 'opponent_disconnected') setOnlineNotice('Opponent disconnected. Waiting for them to return…');
       else if (data.type === 'opponent_reconnected') setOnlineNotice('Opponent reconnected.');
       else if (data.type === 'rematch_requested') setOnlineNotice('Rematch requested. Waiting for the other player…');
@@ -160,6 +168,7 @@ function App() {
 
   function reset() {
     if (mode === 'online' || roomId) { const previous = socketRef.current; socketRef.current = null; previous?.close(); setRoomId(null); setOnlineColor(null); setConnection('offline'); setOnlineNotice('Create a room or enter an invite code to play online.'); }
+    setOnlineClocks(null); setDrawOffer(null); onlineFen.current = null;
     setClock(null); clockHistory.current = [];
     setGame(new Chess());
     setSelected(null);
@@ -230,7 +239,7 @@ function App() {
     return <div className={`player ${game.turn() === color && !result && !game.isGameOver() ? 'to-move' : ''}`}>
       <span className={`avatar ${color === 'w' ? 'light-avatar' : 'dark'}`}>{color === 'w' ? '♔' : '♚'}</span>
       <div><b>{isBot ? levels.find(x => x.id === level)?.name : isYou ? `You · ${name}` : `${name} pieces`}</b><small>{isBot ? 'Computer opponent' : isYou || (mode === 'bot' && color === 'w') ? 'You' : mode === 'online' ? 'Online opponent' : 'Local player'}</small></div>
-      {mode !== 'online' && timeControl > 0 ? <span className={`clock ${clockValues && clockValues[color] < 30000 ? 'low-time' : ''}`} aria-label={`${name} time remaining`}>{formatClock(clockValues?.[color] ?? timeControl)}</span> : <span className="player-side">{name.toUpperCase()}</span>}
+      {mode === 'online' && onlineClocks ? <span className={`clock ${onlineClocks[color] < 30000 ? 'low-time' : ''}`} aria-label={`${name} time remaining`}>{formatClock(onlineClocks[color])}</span> : mode !== 'online' && timeControl > 0 ? <span className={`clock ${clockValues && clockValues[color] < 30000 ? 'low-time' : ''}`} aria-label={`${name} time remaining`}>{formatClock(clockValues?.[color] ?? timeControl)}</span> : <span className="player-side">{name.toUpperCase()}</span>}
     </div>;
   }
   const checkedKing = game.isCheck()
@@ -301,8 +310,10 @@ function App() {
           </div>
           {!game.isGameOver() && !result && history.length > 0 && <div className="end-actions">
             <button onClick={() => mode === 'online' ? socketRef.current?.send(JSON.stringify({ type: 'resign' })) : setResult(`${game.turn() === 'w' ? 'White' : 'Black'} resigned · ${game.turn() === 'w' ? 'Black' : 'White'} wins`)}><Flag size={15}/> Resign</button>
+            {mode === 'online' && <button disabled={connection !== 'connected' || !!drawOffer} onClick={() => socketRef.current?.send(JSON.stringify({ type: 'offer_draw' }))}><Handshake size={15}/>{drawOffer === onlineColor ? 'Draw offered' : 'Offer draw'}</button>}
             {mode !== 'online' && <button onClick={() => setResult('Draw by agreement')}><Handshake size={15}/> Agree draw</button>}
           </div>}
+          {mode === 'online' && drawOffer && drawOffer !== onlineColor && !result && <div className="end-actions"><span>Opponent offers a draw.</span><button onClick={() => socketRef.current?.send(JSON.stringify({ type: 'accept_draw' }))}>Accept</button><button onClick={() => socketRef.current?.send(JSON.stringify({ type: 'decline_draw' }))}>Decline</button></div>}
           {(game.isGameOver() || result) && <div className="game-over"><Crown size={20}/><b>{status}</b>{mode === 'online' ? <button onClick={() => socketRef.current?.send(JSON.stringify({ type: 'rematch' }))}>Request rematch</button> : <button onClick={reset}>Play again</button>}</div>}
         </div>
         <div className="panel moves"><div className="moves-heading"><span className="eyebrow">THE STORY SO FAR</span><Crown size={17}/></div><h2>Move history</h2>
