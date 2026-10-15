@@ -37,7 +37,8 @@ function ordered(game: Chess): Move[] {
   return game.moves({ verbose: true }).sort((a, b) => movePriority(b) - movePriority(a));
 }
 
-function plainMinimax(game: Chess, depth: number, ply: number): number {
+function plainMinimax(game: Chess, depth: number, ply: number, ctx: SearchContext): number {
+  if (++ctx.nodes > ctx.maxNodes || performance.now() >= ctx.deadline) throw ABORT;
   const terminal = terminalScore(game, ply);
   if (terminal !== null) return terminal;
   if (depth === 0) return staticScore(game);
@@ -45,7 +46,7 @@ function plainMinimax(game: Chess, depth: number, ply: number): number {
   for (const move of ordered(game)) {
     game.move(move);
     try {
-      const score = plainMinimax(game, depth - 1, ply + 1);
+      const score = plainMinimax(game, depth - 1, ply + 1, ctx);
       best = game.turn() === 'b' ? Math.max(best, score) : Math.min(best, score);
     } finally { game.undo(); }
   }
@@ -113,7 +114,8 @@ function alphaBeta(game: Chess, depth: number, alpha: number, beta: number, ply:
 
 /**
  * Selects a legal move without mutating the caller's position.
- * Alpha-beta is iterative and bounded; a partially searched depth is discarded.
+ * Minimax and alpha-beta respect search budgets. Alpha-beta is iterative;
+ * a partially searched depth is discarded.
  */
 export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits = {}): Move | null {
   // Drawn positions may still have legal moves, but Play must stop at the result.
@@ -138,24 +140,31 @@ export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits
     }
     return best;
   }
-  if (level === 'minimax') {
-    const maximizing = game.turn() === 'w';
-    let best = moves[0], bestScore = maximizing ? -Infinity : Infinity;
-    for (const move of moves) {
-      game.move(move);
-      let score: number;
-      try { score = plainMinimax(game, 1, 1); }
-      finally { game.undo(); }
-      if (maximizing ? score > bestScore : score < bestScore) { best = move; bestScore = score; }
-    }
-    return best;
-  }
   const ctx: SearchContext = {
     nodes: 0,
     maxNodes: Math.max(100, limits.maxNodes ?? 8000),
     deadline: performance.now() + Math.max(50, limits.maxTimeMs ?? 650),
     table: new Map()
   };
+  if (level === 'minimax') {
+    const maximizing = game.turn() === 'w';
+    let best = moves[0], bestScore = maximizing ? -Infinity : Infinity;
+    try {
+      for (const move of moves) {
+        if (performance.now() >= ctx.deadline) throw ABORT;
+        game.move(move);
+        let score: number;
+        try { score = plainMinimax(game, 1, 1, ctx); }
+        finally { game.undo(); }
+        // Only compare fully evaluated root moves. An interrupted branch must
+        // not replace the legal fallback or the best completed candidate.
+        if (maximizing ? score > bestScore : score < bestScore) { best = move; bestScore = score; }
+      }
+    } catch (error) {
+      if (error !== ABORT) throw error;
+    }
+    return best;
+  }
   const maximizing = game.turn() === 'w';
   let best = moves[0];
   for (let depth = 1; depth <= 5; depth++) {
