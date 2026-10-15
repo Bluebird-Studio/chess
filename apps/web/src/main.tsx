@@ -173,7 +173,7 @@ function App() {
         <p className="lead">A timeless game. A beautiful place to play.</p>
         <div className="player">
           <span className="avatar dark">♚</span>
-          <div><b>{mode === 'bot' ? levels.find(x => x.id === level)?.name : 'Black pieces'}</b><small>{mode === 'bot' ? 'Computer opponent' : mode === 'online' ? 'Online player' : 'Local player'}</small></div>
+          <div><b>{mode === 'bot' ? levels.find(x => x.id === level)?.name : mode === 'online' && online.seat === 'b' ? 'You · Black' : 'Black pieces'}</b><small>{mode === 'bot' ? 'Computer opponent' : mode === 'online' ? online.seat === 'b' ? 'Your pieces' : 'Online opponent' : 'Local player'}</small></div>
           <span className="player-side">BLACK</span>
         </div>
         <div className="board" role="group" aria-label="Chessboard. Select a piece, then its destination. Arrow keys move focus.">
@@ -197,7 +197,7 @@ function App() {
             </button>;
           })}
         </div>
-        <div className="player"><span className="avatar light-avatar">♔</span><div><b>White pieces</b><small>{mode === 'bot' ? 'You' : mode === 'online' ? 'Online player' : 'Local player'}</small></div><span className="player-side">WHITE</span></div>
+        <div className="player"><span className="avatar light-avatar">♔</span><div><b>{mode === 'online' && online.seat === 'w' ? 'You · White' : 'White pieces'}</b><small>{mode === 'bot' ? 'You' : mode === 'online' ? online.seat === 'w' ? 'Your pieces' : 'Online opponent' : 'Local player'}</small></div><span className="player-side">WHITE</span></div>
       </section>
       <aside className="sidebar">
         <div className="panel">
