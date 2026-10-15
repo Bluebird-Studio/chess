@@ -16,9 +16,10 @@ The server owns chess legality, turn order, result and room membership.
 
 - `{"type":"move","from":"e2","to":"e4","promotion":"q"}`: only the player whose turn it is can move; server validates legal moves. Promotion defaults to queen if omitted.
 - `{"type":"resign"}`: broadcast `{"type":"result","winner":"white"|"black","reason":"resignation"}`.
+- `{"type":"offer_draw"}`: broadcasts `{"type":"draw_offered","color":"w"|"b"}`. Only the opposing player may accept or decline it with `{"type":"accept_draw"}` or `{"type":"decline_draw"}`. Acceptance broadcasts `{"type":"result","winner":"draw","reason":"agreement"}`; a move or disconnect cancels a pending offer.
 - `{"type":"rematch"}`: after a terminal position or resignation, each player must request it. Server broadcasts `rematch_requested`; after both agree, it broadcasts a fresh `state` with `rematch:true`.
-- `state` includes `fen`, SAN `history`, `gameOver` and optional `result`. The client should render from this server state rather than apply optimistic authoritative moves.
+- `state` includes `fen`, SAN `history`, `gameOver`, optional `result`, optional `drawOffer` (`"w"` or `"b"`), `clocks` (`{"w":milliseconds,"b":milliseconds}`), optional `activeClock` (`"w"` or `"b"`), and `increment` (milliseconds added after a legal move). The server starts a 5-minute clock when Black joins; clients may configure `CLOCK_BASE_MS` and `CLOCK_INCREMENT_MS` on the server. Clock updates are broadcast four times per second. Clocks continue during disconnects. Timeout awards a win, or a draw if the opponent has insufficient material to checkmate. The client should render from this server state rather than apply optimistic authoritative moves.
 - Disconnect notifications: `opponent_disconnected`, `opponent_reconnected`.
 - Invalid operations can produce `{"type":"error","message":"..."}`. A move from the wrong side is ignored.
 
-Clocks, draw offers and frontend WebSocket integration are still pending. No persistent user accounts or games are stored.
+Frontend WebSocket integration is still pending. No persistent user accounts or games are stored.
