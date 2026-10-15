@@ -146,6 +146,8 @@ wss.on('connection', ws => {
         rooms.set(id, room);
         roomId = id;
         send(ws, { type: 'joined', roomId: id, color: 'w', token, fen: room.game.fen() });
+        // Publish configured clocks immediately, while the lobby is still frozen.
+        send(ws, state(room));
         return;
       }
 
