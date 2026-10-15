@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
 import { boardFocusIndex } from './board-input';
 import { toggleAnnotation } from './annotations';
@@ -29,6 +29,33 @@ export function Analyze({ pgn, onClose }: { pgn: string; onClose: () => void }) 
     for (const move of replay.moves.slice(0, ply)) position.move(move);
     return position;
   }, [replay, ply]);
+  const [candidate, setCandidate] = useState<string[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const worker = useRef<Worker | null>(null);
+  function cancelSearch() {
+    worker.current?.terminate(); worker.current = null; setSearching(false);
+  }
+  useEffect(() => {
+    setCandidate([]); setSearchError(''); setSearching(false);
+    return () => { worker.current?.terminate(); worker.current = null; };
+  }, [game]);
+  function findCandidate() {
+    cancelSearch(); setPlaying(false); setCandidate([]); setSearchError('');
+    try {
+      const next = new Worker(new URL('./analysis.worker.ts', import.meta.url), { type: 'module' });
+      worker.current = next; setSearching(true);
+      next.onmessage = (event: MessageEvent<{ line?: string[]; error?: string }>) => {
+        if (worker.current !== next) return;
+        setCandidate(event.data.line ?? []); setSearchError(event.data.error ?? ''); cancelSearch();
+      };
+      next.onerror = () => {
+        if (worker.current !== next) return;
+        setSearchError('Analysis is unavailable. Try again.'); cancelSearch();
+      };
+      next.postMessage(game.pgn());
+    } catch { setSearchError('This browser could not start analysis.'); cancelSearch(); }
+  }
   const positionKey = game.fen();
   const marked = annotations[positionKey] ?? [];
   function mark(square: Square) {
@@ -100,6 +127,10 @@ export function Analyze({ pgn, onClose }: { pgn: string; onClose: () => void }) 
         </select>
       </div><p role="status">{positionStatus}</p><small>Arrow keys step through moves · Home / End jump to start / finish</small><button onClick={() => setFlipped(!flipped)}>Flip board</button>
     </div><div className="analysis-tools">
+      <h3>Candidate line</h3><p>A short continuation from our original alpha-beta engine. This bounded search can miss tactics; it is not a precise evaluation.</p>
+      <button disabled={game.isGameOver() || importing} onClick={searching ? cancelSearch : findCandidate}>{searching ? 'Cancel search' : 'Find a candidate'}</button>
+      <p role="status">{searching ? 'Searching this position…' : candidate.length ? candidate.join(' · ') : game.isGameOver() ? 'Game over · no continuation.' : 'Choose a position, then search for an idea.'}</p>
+      {searchError && <p role="alert" className="analysis-error">{searchError}</p>}
       <h3>Moves</h3><div className="replay-moves">{replay.moves.length ? replay.moves.map((_, i) => <button key={i} aria-current={ply === i + 1 ? 'step' : undefined} onClick={() => navigate(i + 1)}>{replay.details[i].label}</button>) : <p>No moves in this position.</p>}</div>
       <label htmlFor="analysis-file">OPEN A PGN OR FEN FILE</label><input id="analysis-file" type="file" accept=".pgn,.fen,.txt" disabled={importing} aria-describedby="analysis-file-help" onChange={event => {
         const file = event.currentTarget.files?.[0];
