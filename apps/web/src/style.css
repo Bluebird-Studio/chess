@@ -144,3 +144,5 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .captured-pieces { display: block; min-height: 19px; margin-top: 5px; color: #d1dfcd; font-family: 'DejaVu Sans', 'Segoe UI Symbol', serif; font-size: 17px; line-height: 1.2; letter-spacing: -2px; overflow-wrap: anywhere; }
 .player > div { min-width: 0; }
 .player .clock, .player-side { flex-shrink: 0; }
+
+.lesson-board button.square.hint-piece::after { content: ""; position: absolute; inset: 5px; border: 3px dashed #ffe29a; border-radius: 6px; pointer-events: none; filter: drop-shadow(0 1px 2px #17251d); }

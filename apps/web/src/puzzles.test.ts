@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Chess, type Square } from 'chess.js';
-import { type PuzzlePromotion, puzzles, puzzleSolution, tryPuzzleMove } from './puzzles';
+import { type PuzzlePromotion, puzzles, puzzleSolution, puzzlePieceHint, tryPuzzleMove } from './puzzles';
 
 test('original lessons start legal and every advertised solution is checkmate', () => {
   for (const puzzle of puzzles) {
@@ -66,4 +66,19 @@ test('promotion exercises respect the chosen piece and never silently promote', 
     assert.equal(move.promotion, promotion);
   }
   assert.throws(() => resolveMoveText(new Chess(puzzle.fen), 'g7g8'), /Choose a promotion/);
+});
+
+test('piece hints identify a legal mating piece for either side without revealing a destination', () => {
+  for (const puzzle of puzzles) {
+    const before = JSON.stringify(puzzle);
+    const hint = puzzlePieceHint(puzzle);
+    const game = new Chess(puzzle.fen);
+    assert.equal(hint.square, puzzleSolution(puzzle).from);
+    assert.equal(game.get(hint.square)?.color, game.turn());
+    assert.ok(game.moves({ square: hint.square }).some(move => move.endsWith('#')));
+    assert.ok(hint.message.includes(game.turn() === 'w' ? 'white' : 'black'));
+    assert.ok(hint.message.includes(hint.square));
+    assert.equal(hint.message.includes(puzzleSolution(puzzle).to), false);
+    assert.equal(JSON.stringify(puzzle), before);
+  }
 });
