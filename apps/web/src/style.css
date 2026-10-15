@@ -136,3 +136,7 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .material-bar > span { display: block; height: 100%; background: #eeeade; transition: width 180ms ease; }
 .material-totals { display: flex; justify-content: space-between; gap: 1rem; margin: .5rem 0; font-size: .8rem; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .material-bar > span { transition: none; } }
+
+.lesson-promotion { margin: 16px 0; padding: 16px; border: 1px solid #a6c596; border-radius: 12px; min-width: 0; }
+.lesson-promotion legend { padding: 0 8px; color: #d7edc9; }
+.lesson-promotion > button { margin-top: 12px; }
