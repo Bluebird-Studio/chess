@@ -189,7 +189,9 @@ wss.on('connection', ws => {
         startClock(room);
         roomId = id;
         send(ws, { type: 'joined', roomId: id, color, token: msg.token, fen: room.game.fen(), reconnected: true });
-        send(ws, state(room));
+        // A reconnect can arrive after the deadline but before the next timer
+        // callback. Publish the adjudicated result, never an active zero clock.
+        if (!settleClock(room)) send(ws, state(room));
         for (const seat of room.rematch) send(ws, { type: 'rematch_requested', color: seat });
         // Notify only the other seat: reconnecting is not evidence that the
         // opponent is present (both players may have lost their connection).

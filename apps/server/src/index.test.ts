@@ -777,3 +777,76 @@ test('invalid timing settings preserve finite ticking clocks and connected seats
     child.kill('SIGTERM');
   }
 });
+
+for (const active of ['w', 'b'] as const) {
+  test(`reconnect adjudicates ${active}'s expired clock before the periodic tick`, { timeout: 15000 }, async () => {
+    const port = 37000 + Math.floor(Math.random() * 2000);
+    // Suppress only the clock interval to reproduce a delayed timer callback.
+    // Reconnect must settle elapsed time without relying on that callback.
+    const preload = 'data:text/javascript,' + encodeURIComponent(`
+      const realInterval = globalThis.setInterval;
+      globalThis.setInterval = (callback, ms, ...args) =>
+        realInterval(ms === 250 ? () => {} : callback, ms, ...args);
+    `);
+    const child = spawn(process.execPath, ['--import', 'tsx', '--import', preload, 'src/index.ts'], {
+      cwd: serverDir,
+      env: { ...process.env, PORT: String(port), CLOCK_BASE_MS: '1000', CLOCK_INCREMENT_MS: '0' },
+      stdio: 'pipe'
+    });
+    const clients: WebSocket[] = [];
+    async function connect() {
+      for (let i = 0; i < 50; i++) {
+        try {
+          const ws = await new Promise<WebSocket>((resolve, reject) => {
+            const socket = new WebSocket('ws://127.0.0.1:' + port);
+            socket.once('open', () => resolve(socket));
+            socket.once('error', reject);
+          });
+          clients.push(ws);
+          return ws;
+        } catch { await delay(100); }
+      }
+      throw Error('Server did not start');
+    }
+    try {
+      const white = await connect(), readWhite = inbox(white);
+      white.send(JSON.stringify({ type: 'create' }));
+      const created = await readWhite(m => m.type === 'joined');
+      const black = await connect(), readBlack = inbox(black);
+      black.send(JSON.stringify({ type: 'join', roomId: created.roomId }));
+      const joined = await readBlack(m => m.type === 'joined');
+      await readBlack(m => m.type === 'state');
+      if (active === 'b') {
+        white.send(JSON.stringify({ type: 'move', from: 'e2', to: 'e4' }));
+        await readBlack(m => m.type === 'state' && m.history.length === 1);
+      }
+      const departing = active === 'w' ? white : black;
+      const readOpponent = active === 'w' ? readBlack : readWhite;
+      const closed = new Promise<void>(resolve => departing.once('close', () => resolve()));
+      departing.close();
+      await closed;
+      await readOpponent(m => m.type === 'opponent_disconnected');
+      await delay(1100);
+      const returned = await connect(), readReturned = inbox(returned);
+      returned.send(JSON.stringify({
+        type: 'reconnect', roomId: created.roomId,
+        token: active === 'w' ? created.token : joined.token
+      }));
+      await readReturned(m => m.type === 'joined');
+      const finished = await readReturned(m => m.type === 'state');
+      assert.equal(finished.gameOver, true);
+      assert.equal(finished.result, active === 'w' ? 'black' : 'white');
+      assert.equal(finished.reason, 'timeout');
+      assert.equal(finished.clocks[active], 0);
+      assert.equal(finished.activeClock, undefined);
+      const result = await readReturned(m => m.type === 'result');
+      assert.deepEqual(await readOpponent(m => m.type === 'result'), result);
+      assert.equal(result.winner, finished.result);
+      returned.send(JSON.stringify({ type: 'move', from: 'g1', to: 'f3' }));
+      assert.equal((await readReturned(m => m.type === 'error')).message, 'Game is over');
+    } finally {
+      for (const ws of clients) ws.terminate();
+      child.kill('SIGTERM');
+    }
+  });
+}
