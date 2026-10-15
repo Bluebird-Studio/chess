@@ -8,6 +8,11 @@ type Room = {
   players: Map<WebSocket, Color>;
   tokens: Partial<Record<Color, string>>;
   result?: 'white' | 'black' | 'draw';
+  drawOffer?: Color;
+  remaining: Record<Color, number>;
+  increment: number;
+  turnStartedAt?: number;
+  clockInterval?: ReturnType<typeof setInterval>;
   rematch: Set<Color>;
   expiry?: ReturnType<typeof setTimeout>;
 };
@@ -15,6 +20,8 @@ type Room = {
 const rooms = new Map<string, Room>();
 const wss = new WebSocketServer({ port: Number(process.env.PORT || 8080) });
 const IDLE_ROOM_MS = 10 * 60_000;
+const CLOCK_BASE_MS = Math.max(1_000, Number(process.env.CLOCK_BASE_MS) || 5 * 60_000);
+const CLOCK_INCREMENT_MS = Math.max(0, Number(process.env.CLOCK_INCREMENT_MS) || 0);
 
 function send(ws: WebSocket, data: unknown) {
   if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
@@ -23,11 +30,49 @@ function broadcast(room: Room, data: unknown) {
   for (const ws of room.players.keys()) send(ws, data);
 }
 function state(room: Room) {
+  const remaining = { ...room.remaining };
+  if (room.turnStartedAt !== undefined && !room.result && !room.game.isGameOver()) {
+    const active = room.game.turn();
+    remaining[active] = Math.max(0, remaining[active] - (Date.now() - room.turnStartedAt));
+  }
   return {
     type: 'state', fen: room.game.fen(), history: room.game.history(),
     gameOver: Boolean(room.result) || room.game.isGameOver(),
-    result: room.result
+    result: room.result,
+    drawOffer: room.drawOffer,
+    clocks: remaining,
+    activeClock: room.turnStartedAt === undefined ? undefined : room.game.turn(),
+    increment: room.increment
   };
+}
+function stopClock(room: Room) {
+  if (room.clockInterval) clearInterval(room.clockInterval);
+  room.clockInterval = undefined;
+  room.turnStartedAt = undefined;
+}
+function settleClock(room: Room): boolean {
+  if (room.turnStartedAt === undefined || room.result || room.game.isGameOver()) return false;
+  const active = room.game.turn();
+  const elapsed = Date.now() - room.turnStartedAt;
+  if (elapsed < room.remaining[active]) {
+    room.remaining[active] -= elapsed;
+    room.turnStartedAt = Date.now();
+    return false;
+  }
+  room.remaining[active] = 0;
+  room.result = room.game.isInsufficientMaterial() ? 'draw' : active === 'w' ? 'black' : 'white';
+  stopClock(room);
+  broadcast(room, { type: 'result', winner: room.result, reason: room.result === 'draw' ? 'timeout_insufficient_material' : 'timeout' });
+  return true;
+}
+function startClock(room: Room) {
+  if (room.turnStartedAt !== undefined || room.result || room.game.isGameOver()) return;
+  room.turnStartedAt = Date.now();
+  room.clockInterval = setInterval(() => {
+    if (settleClock(room)) return;
+    broadcast(room, state(room));
+  }, 250);
+  room.clockInterval.unref();
 }
 function cancelExpiry(room: Room) {
   if (room.expiry) clearTimeout(room.expiry);
@@ -37,7 +82,10 @@ function scheduleExpiry(id: string, room: Room) {
   if (room.players.size) return;
   cancelExpiry(room);
   room.expiry = setTimeout(() => {
-    if (rooms.get(id) === room && room.players.size === 0) rooms.delete(id);
+    if (rooms.get(id) === room && room.players.size === 0) {
+      stopClock(room);
+      rooms.delete(id);
+    }
   }, IDLE_ROOM_MS);
   room.expiry.unref();
 }
@@ -61,7 +109,7 @@ wss.on('connection', ws => {
         const token = randomUUID();
         const room: Room = {
           game: new Chess(), players: new Map([[ws, 'w']]),
-          tokens: { w: token }, rematch: new Set()
+          tokens: { w: token }, rematch: new Set(), remaining: { w: CLOCK_BASE_MS, b: CLOCK_BASE_MS }, increment: CLOCK_INCREMENT_MS
         };
         rooms.set(id, room);
         roomId = id;
@@ -78,6 +126,7 @@ wss.on('connection', ws => {
         room.tokens.b = token;
         room.players.set(ws, 'b');
         cancelExpiry(room);
+        startClock(room);
         roomId = id;
         send(ws, { type: 'joined', roomId: id, color: 'b', token, fen: room.game.fen() });
         broadcast(room, state(room));
@@ -99,6 +148,7 @@ wss.on('connection', ws => {
         }
         room.players.set(ws, color);
         cancelExpiry(room);
+        startClock(room);
         roomId = id;
         send(ws, { type: 'joined', roomId: id, color, token: msg.token, fen: room.game.fen(), reconnected: true });
         send(ws, state(room));
@@ -112,9 +162,42 @@ wss.on('connection', ws => {
       if (!room || !color) return;
 
       if (msg.type === 'resign') {
+        if (settleClock(room)) return;
         if (room.result || room.game.isGameOver()) return;
         room.result = color === 'w' ? 'black' : 'white';
+        stopClock(room);
         broadcast(room, { type: 'result', winner: room.result, reason: 'resignation' });
+        return;
+      }
+      if (msg.type === 'offer_draw') {
+        if (settleClock(room)) return;
+        if (room.result || room.game.isGameOver()) return;
+        if (room.drawOffer) { send(ws, { type: 'error', message: 'A draw offer is already pending' }); return; }
+        room.drawOffer = color;
+        broadcast(room, { type: 'draw_offered', color });
+        return;
+      }
+      if (msg.type === 'accept_draw') {
+        if (settleClock(room)) return;
+        if (room.result || room.game.isGameOver()) return;
+        if (!room.drawOffer || room.drawOffer === color) {
+          send(ws, { type: 'error', message: 'No opponent draw offer to accept' });
+          return;
+        }
+        room.drawOffer = undefined;
+        room.result = 'draw';
+        stopClock(room);
+        broadcast(room, { type: 'result', winner: 'draw', reason: 'agreement' });
+        return;
+      }
+      if (msg.type === 'decline_draw') {
+        if (settleClock(room)) return;
+        if (!room.drawOffer || room.drawOffer === color) {
+          send(ws, { type: 'error', message: 'No opponent draw offer to decline' });
+          return;
+        }
+        room.drawOffer = undefined;
+        broadcast(room, { type: 'draw_declined' });
         return;
       }
       if (msg.type === 'rematch') {
@@ -122,19 +205,28 @@ wss.on('connection', ws => {
         room.rematch.add(color);
         broadcast(room, { type: 'rematch_requested', color });
         if (room.rematch.size === 2) {
+          stopClock(room);
           room.game = new Chess();
           room.result = undefined;
+          room.remaining = { w: CLOCK_BASE_MS, b: CLOCK_BASE_MS };
+          room.drawOffer = undefined;
+          startClock(room);
           room.rematch.clear();
           broadcast(room, { ...state(room), rematch: true });
         }
         return;
       }
       if (msg.type === 'move') {
+        if (settleClock(room)) return;
         if (room.result || room.game.isGameOver() || color !== room.game.turn()) return;
         const from = msg.from as Square, to = msg.to as Square;
         if (typeof from !== 'string' || typeof to !== 'string') return;
         try { room.game.move({ from, to, promotion: msg.promotion || 'q' }); }
         catch { send(ws, { type: 'error', message: 'Illegal move' }); return; }
+        room.remaining[color] += room.increment;
+        room.turnStartedAt = room.game.isGameOver() ? undefined : Date.now();
+        if (room.game.isGameOver()) stopClock(room);
+        room.drawOffer = undefined;
         broadcast(room, state(room));
       }
     } catch {
@@ -147,7 +239,9 @@ wss.on('connection', ws => {
     const room = rooms.get(roomId);
     if (!room || !room.players.has(ws)) return;
     room.players.delete(ws);
+    // Clocks keep running while a player reconnects; the active side remains charged.
     room.rematch.clear();
+    room.drawOffer = undefined;
     broadcast(room, { type: 'opponent_disconnected' });
     scheduleExpiry(roomId, room);
   });

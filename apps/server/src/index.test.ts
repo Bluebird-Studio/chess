@@ -41,12 +41,20 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   assert.deepEqual((await whiteInbox(m=>m.type==='state'&&m.history.length===2)).history,['e4','e5']);
   white.send(JSON.stringify({type:'resign'}));
   assert.deepEqual(await blackInbox(m=>m.type==='result'),{type:'result',winner:'black',reason:'resignation'});
+  await whiteInbox(m=>m.type==='result');
   white.send(JSON.stringify({type:'move',from:'g1',to:'f3'}));
   white.send(JSON.stringify({type:'rematch'}));
   assert.equal((await blackInbox(m=>m.type==='rematch_requested')).color,'w');
   black.send(JSON.stringify({type:'rematch'}));
   assert.equal((await whiteInbox(m=>m.type==='state'&&m.rematch===true)).history.length,0);
   assert.equal((await blackInbox(m=>m.type==='state'&&m.rematch===true)).gameOver,false);
+  white.send(JSON.stringify({type:'offer_draw'}));
+  assert.deepEqual(await blackInbox(m=>m.type==='draw_offered'),{type:'draw_offered',color:'w'});
+  white.send(JSON.stringify({type:'accept_draw'}));
+  assert.equal((await whiteInbox(m=>m.type==='error')).message,'No opponent draw offer to accept');
+  black.send(JSON.stringify({type:'accept_draw'}));
+  assert.deepEqual(await whiteInbox(m=>m.type==='result'),{type:'result',winner:'draw',reason:'agreement'});
+  assert.deepEqual(await blackInbox(m=>m.type==='result'),{type:'result',winner:'draw',reason:'agreement'});
  }finally{for(const ws of clients)ws.terminate();child.kill('SIGTERM')}
 });
 
@@ -106,6 +114,55 @@ test('reconnect restores the correct seat and rejects invalid tokens', { timeout
     assert.deepEqual((await readRecovered(m => m.type === 'state')).history, ['e4']);
     recovered.send(JSON.stringify({ type: 'move', from: 'e7', to: 'e5' }));
     assert.deepEqual((await readWhite(m => m.type === 'state' && m.history.length === 2)).history, ['e4', 'e5']);
+  } finally {
+    for (const ws of clients) ws.terminate();
+    child.kill('SIGTERM');
+  }
+});
+
+test('authoritative clocks start with both players, apply increments, and adjudicate timeout', { timeout: 15000 }, async () => {
+  const port = 25000 + Math.floor(Math.random() * 2000);
+  const child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
+    cwd: process.cwd(), env: { ...process.env, PORT: String(port), CLOCK_BASE_MS: '1800', CLOCK_INCREMENT_MS: '120' }, stdio: 'pipe'
+  });
+  const clients: WebSocket[] = [];
+  async function connect() {
+    for (let i = 0; i < 50; i++) {
+      try {
+        const ws = await new Promise<WebSocket>((resolve, reject) => {
+          const socket = new WebSocket('ws://127.0.0.1:' + port);
+          socket.once('open', () => resolve(socket));
+          socket.once('error', reject);
+        });
+        clients.push(ws);
+        return ws;
+      } catch { await delay(100); }
+    }
+    throw Error('Server did not start');
+  }
+  try {
+    const white = await connect();
+    const readWhite = inbox(white);
+    white.send(JSON.stringify({ type: 'create' }));
+    const created = await readWhite(m => m.type === 'joined');
+    const black = await connect();
+    const readBlack = inbox(black);
+    black.send(JSON.stringify({ type: 'join', roomId: created.roomId }));
+    await readBlack(m => m.type === 'joined');
+    const start = await readWhite(m => m.type === 'state');
+    assert.equal(start.activeClock, 'w');
+    assert.ok(start.clocks.w >= 1700 && start.clocks.w <= 1800);
+    assert.ok(start.clocks.b >= 1700 && start.clocks.b <= 1800);
+    assert.equal(start.increment, 120);
+
+    white.send(JSON.stringify({ type: 'move', from: 'e2', to: 'e4' }));
+    const afterMove = await readWhite(m => m.type === 'state' && m.history.length === 1);
+    assert.equal(afterMove.activeClock, 'b');
+    assert.ok(afterMove.clocks.w > 1800 && afterMove.clocks.w <= 1920);
+    assert.ok(afterMove.clocks.b >= 1750 && afterMove.clocks.b <= 1800);
+    const result = await readBlack(m => m.type === 'result' && m.reason === 'timeout');
+    assert.equal(result.winner, 'white');
+    assert.deepEqual(await readWhite(m => m.type === 'result' && m.reason === 'timeout'), result);
   } finally {
     for (const ws of clients) ws.terminate();
     child.kill('SIGTERM');
