@@ -98,3 +98,25 @@ for (const [color, fen] of [
     assert.deepEqual(game.history(), history);
   });
 }
+
+for (const jump of [-60_000, 60_000]) {
+  test(`alpha-beta respects elapsed budget during ${jump > 0 ? 'forward' : 'backward'} wall-clock jumps`, t => {
+    const game = new Chess();
+    game.move('e4');
+    const fen = game.fen(), history = game.history();
+    let wallTime = 1_000_000, elapsed = 0, clockReads = 0;
+    t.mock.method(Date, 'now', () => (wallTime += jump));
+    // Advance elapsed time deterministically: abort inside the search after
+    // making a move, exercising the finally block that must restore history.
+    t.mock.method(performance, 'now', () => {
+      clockReads++;
+      elapsed += 20;
+      return elapsed;
+    });
+    const move = selectBotMove(game, 'alphabeta', { maxTimeMs: 50, maxNodes: 100_000 });
+    assert.ok(move && game.moves().includes(move.san), 'budget exhaustion retains a legal fallback');
+    assert.equal(clockReads, 4, 'root and recursive search use the same monotonic deadline');
+    assert.equal(game.fen(), fen);
+    assert.deepEqual(game.history(), history);
+  });
+}
