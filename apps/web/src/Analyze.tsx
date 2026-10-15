@@ -3,6 +3,7 @@ import { Chess, type Square } from 'chess.js';
 import { boardFocusIndex } from './board-input';
 import { toggleAnnotation } from './annotations';
 import { candidatePreview } from './candidate-preview';
+import { materialBalance } from './material';
 import { readReplay, readReplayFile, replayShortcut, replayStatus } from './replay';
 
 const pieces: Record<string, string> = { wk:'♔', wq:'♕', wr:'♖', wb:'♗', wn:'♘', wp:'♙', bk:'♚', bq:'♛', br:'♜', bb:'♝', bn:'♞', bp:'♟' };
@@ -62,6 +63,7 @@ export function Analyze({ pgn, onClose }: { pgn: string; onClose: () => void }) 
   const [candidateSource, setCandidateSource] = useState('');
   const previewing = previewPly > 0 && candidateSource === game.pgn();
   const displayGame = useMemo(() => previewing ? candidatePreview(candidateSource, candidate, previewPly) : game, [game, candidateSource, candidate, previewPly, previewing]);
+  const material = materialBalance(displayGame);
   const positionKey = displayGame.fen();
   const marked = annotations[positionKey] ?? [];
   function mark(square: Square) {
@@ -135,6 +137,12 @@ export function Analyze({ pgn, onClose }: { pgn: string; onClose: () => void }) 
         </select>
       </div><p role="status">{positionStatus}</p><small>Arrow keys step through moves · Home / End jump to start / finish</small><button onClick={() => setFlipped(!flipped)}>Flip board</button>
     </div><div className="analysis-tools">
+      <div className="material-summary">
+        <h3>Material balance</h3><p role="status">{material.label}</p>
+        <div className="material-bar" role="img" aria-label={`White ${material.white} points, Black ${material.black} points. ${material.label}.`}><span style={{ width: `${material.whitePercent}%` }} /></div>
+        <div className="material-totals"><span>White · {material.white}</span><span>Black · {material.black}</span></div>
+        <small>Piece values: pawn 1, knight / bishop 3, rook 5, queen 9. Material alone does not measure position quality or predict the result.</small>
+      </div>
       <h3>Candidate line</h3><p>A short continuation from our original alpha-beta engine. This bounded search can miss tactics; it is not a precise evaluation.</p>
       <button disabled={game.isGameOver() || importing} onClick={searching ? cancelSearch : findCandidate}>{searching ? 'Cancel search' : 'Find a candidate'}</button>
       <p role="status">{searching ? 'Searching this position…' : candidate.length ? candidate.join(' · ') : game.isGameOver() ? 'Game over · no continuation.' : 'Choose a position, then search for an idea.'}</p>

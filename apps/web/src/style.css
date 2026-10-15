@@ -129,3 +129,10 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .resign-dialog-actions button{padding:12px 18px;border:1px solid #718a7470;border-radius:8px;background:#31483a;color:#eef4ef;font:inherit;cursor:pointer}
 .resign-dialog-actions .confirm-resign{background:#643c35;border-color:#c18471;color:#fff1ec}
 .resign-dialog-actions button:focus-visible{outline:3px solid #b9d59f;outline-offset:3px}
+
+.material-summary { padding-bottom: 1rem; border-bottom: 1px solid var(--line, #384039); }
+.material-summary h3 { margin-top: 0; }
+.material-bar { display: flex; height: 12px; overflow: hidden; border: 1px solid #879186; border-radius: 999px; background: #262e2a; }
+.material-bar > span { display: block; height: 100%; background: #eeeade; transition: width 180ms ease; }
+.material-totals { display: flex; justify-content: space-between; gap: 1rem; margin: .5rem 0; font-size: .8rem; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .material-bar > span { transition: none; } }
