@@ -8,6 +8,7 @@ type Room = {
   players: Map<WebSocket, Color>;
   tokens: Partial<Record<Color, string>>;
   result?: 'white' | 'black' | 'draw';
+  reason?: string;
   drawOffer?: Color;
   remaining: Record<Color, number>;
   increment: number;
@@ -39,6 +40,7 @@ function state(room: Room) {
     type: 'state', fen: room.game.fen(), history: room.game.history(),
     gameOver: Boolean(room.result) || room.game.isGameOver(),
     result: room.result,
+    reason: room.reason,
     drawOffer: room.drawOffer,
     clocks: remaining,
     activeClock: room.turnStartedAt === undefined ? undefined : room.game.turn(),
@@ -61,8 +63,9 @@ function settleClock(room: Room): boolean {
   }
   room.remaining[active] = 0;
   room.result = room.game.isInsufficientMaterial() ? 'draw' : active === 'w' ? 'black' : 'white';
+  room.reason = room.result === 'draw' ? 'timeout_insufficient_material' : 'timeout';
   stopClock(room);
-  broadcast(room, { type: 'result', winner: room.result, reason: room.result === 'draw' ? 'timeout_insufficient_material' : 'timeout' });
+  broadcast(room, { type: 'result', winner: room.result, reason: room.reason });
   return true;
 }
 function startClock(room: Room) {
@@ -166,8 +169,9 @@ wss.on('connection', ws => {
         if (settleClock(room)) return;
         if (room.result || room.game.isGameOver()) return;
         room.result = color === 'w' ? 'black' : 'white';
+        room.reason = 'resignation';
         stopClock(room);
-        broadcast(room, { type: 'result', winner: room.result, reason: 'resignation' });
+        broadcast(room, { type: 'result', winner: room.result, reason: room.reason });
         return;
       }
       if (msg.type === 'offer_draw') {
@@ -187,6 +191,7 @@ wss.on('connection', ws => {
         }
         room.drawOffer = undefined;
         room.result = 'draw';
+        room.reason = 'agreement';
         stopClock(room);
         broadcast(room, { type: 'result', winner: 'draw', reason: 'agreement' });
         return;
@@ -209,6 +214,7 @@ wss.on('connection', ws => {
           stopClock(room);
           room.game = new Chess();
           room.result = undefined;
+          room.reason = undefined;
           room.remaining = { w: CLOCK_BASE_MS, b: CLOCK_BASE_MS };
           room.drawOffer = undefined;
           startClock(room);
@@ -230,7 +236,14 @@ wss.on('connection', ws => {
         catch { send(ws, { type: 'error', message: 'Illegal move' }); return; }
         room.remaining[color] += room.increment;
         room.turnStartedAt = room.game.isGameOver() ? undefined : Date.now();
-        if (room.game.isGameOver()) stopClock(room);
+        if (room.game.isGameOver()) {
+          room.result = room.game.isCheckmate() ? (room.game.turn() === 'w' ? 'black' : 'white') : 'draw';
+          room.reason = room.game.isCheckmate() ? 'checkmate' :
+            room.game.isStalemate() ? 'stalemate' :
+            room.game.isInsufficientMaterial() ? 'insufficient_material' :
+            room.game.isThreefoldRepetition() ? 'threefold_repetition' : 'fifty_move_rule';
+          stopClock(room);
+        }
         room.drawOffer = undefined;
         broadcast(room, state(room));
       }

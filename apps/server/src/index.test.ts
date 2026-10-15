@@ -57,6 +57,47 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   black.send(JSON.stringify({type:'accept_draw'}));
   assert.deepEqual(await whiteInbox(m=>m.type==='result'),{type:'result',winner:'draw',reason:'agreement'});
   assert.deepEqual(await blackInbox(m=>m.type==='result'),{type:'result',winner:'draw',reason:'agreement'});
+  // Reclaiming a finished seat must preserve the result and its reason.
+  const recovered = await new Promise<WebSocket>((resolve,reject)=>{
+   const socket=new WebSocket('ws://127.0.0.1:'+port);
+   socket.once('open',()=>resolve(socket));socket.once('error',reject);
+  });
+  clients.push(recovered);const recoveredInbox=inbox(recovered);
+  recovered.send(JSON.stringify({type:'reconnect',roomId:joined.roomId,token:joined.token}));
+  await recoveredInbox(m=>m.type==='joined');
+  const agreed=await recoveredInbox(m=>m.type==='state');
+  assert.equal(agreed.result,'draw');assert.equal(agreed.reason,'agreement');
+  assert.equal(agreed.activeClock,undefined);
+
+  async function rematch(){
+   recovered.send(JSON.stringify({type:'rematch'}));
+   black.send(JSON.stringify({type:'rematch'}));
+   const fresh=await recoveredInbox(m=>m.type==='state'&&m.rematch);
+   await blackInbox(m=>m.type==='state'&&m.rematch);
+   assert.equal(fresh.result,undefined);assert.equal(fresh.reason,undefined);
+   assert.equal(fresh.gameOver,false);assert.equal(fresh.activeClock,'w');
+  }
+  async function play(moves:string[][]){
+   let last:any;
+   for(const [index,[from,to]] of moves.entries()){
+    (index%2===0?recovered:black).send(JSON.stringify({type:'move',from,to}));
+    last=await recoveredInbox(m=>m.type==='state'&&m.history.length===index+1);
+    await blackInbox(m=>m.type==='state'&&m.history.length===index+1);
+   }
+   return last;
+  }
+  await rematch();
+  const mate=await play([['f2','f3'],['e7','e5'],['g2','g4'],['d8','h4']]);
+  assert.equal(mate.gameOver,true);assert.equal(mate.result,'black');
+  assert.equal(mate.reason,'checkmate');assert.equal(mate.activeClock,undefined);
+  await rematch();
+  const repetition=await play([
+   ['g1','f3'],['g8','f6'],['f3','g1'],['f6','g8'],
+   ['g1','f3'],['g8','f6'],['f3','g1'],['f6','g8']
+  ]);
+  assert.equal(repetition.gameOver,true);assert.equal(repetition.result,'draw');
+  assert.equal(repetition.reason,'threefold_repetition');assert.equal(repetition.activeClock,undefined);
+
  }finally{for(const ws of clients)ws.terminate();child.kill('SIGTERM')}
 });
 
