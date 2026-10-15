@@ -83,3 +83,18 @@ for (const level of levels.filter(level => level !== 'random')) {
     });
   }
 }
+
+for (const [color, fen] of [
+  ['white', '3rk3/8/8/3p4/8/8/8/3QK3 w - - 0 1'],
+  ['black', '3qk3/8/8/8/3P4/8/8/3RK3 b - - 0 1']
+]) {
+  test(`alpha-beta avoids a poisoned pawn for ${color} within a short search`, () => {
+    const game = new Chess(fen);
+    const history = game.history();
+    const move = selectBotMove(game, 'alphabeta', { maxNodes: 100, maxTimeMs: 1000 });
+    assert.ok(move);
+    assert.ok(!move.captured, `must see the rook recapture after ${move.san}`);
+    assert.equal(game.fen(), fen);
+    assert.deepEqual(game.history(), history);
+  });
+}
