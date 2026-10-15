@@ -147,7 +147,9 @@ test('minimax also respects its node budget when the elapsed clock has not advan
   t.mock.method(performance, 'now', () => { checks++; return 0; });
   const move = selectBotMove(game, 'minimax', { maxNodes: 100, maxTimeMs: 1000 });
   assert.ok(move && game.moves().includes(move.san));
-  assert.ok(checks <= 110, `node budget should bound search work (observed ${checks} checks)`);
+  // Each of the two root passes also checks time before entering a node.
+  assert.ok(checks <= 100 + 2 * game.moves().length + 1,
+    `node budget plus root deadline checks should bound work (observed ${checks} checks)`);
   assert.equal(game.fen(), fen);
   assert.deepEqual(game.history(), []);
 });
@@ -290,3 +292,29 @@ test('greedy includes both captured material and promotion gain', () => {
   assert.equal(move.promotion, 'q');
   assert.equal(game.fen(), '1r2k3/P7/8/8/8/8/8/4K2R w - - 0 1');
 });
+
+for (const [color, fen] of [
+  ['white', '4k3/R7/8/8/8/8/7P/4K3 w - - 99 51'],
+  ['black', 'r3k3/7p/8/8/8/8/8/4K3 b - - 99 51']
+]) {
+  test(`minimax keeps its completed depth for ${color} after a partial deeper pass`, t => {
+    const game = new Chess(fen);
+    const rootMoves = game.moves().length;
+    let initialized = false, rootChecks = 0;
+    t.mock.method(performance, 'now', () => {
+      if (!initialized) { initialized = true; return 0; }
+      if (game.history().length === 0) rootChecks++;
+      // Finish depth one and the first (drawing rook) candidate of depth two,
+      // then interrupt before considering the winning pawn continuation.
+      return rootChecks > rootMoves + 1 ? 100 : 0;
+    });
+    const move = selectBotMove(game, 'minimax', { maxTimeMs: 50, maxNodes: 100_000 });
+    assert.equal(rootChecks, rootMoves + 2, 'exercise an incomplete second pass');
+    assert.ok(move);
+    assert.equal(move.piece, 'p', 'retain the winning continuation from the complete pass');
+    assert.equal(game.fen(), fen);
+    assert.deepEqual(game.history(), []);
+    game.move(move);
+    assert.equal(game.isGameOver(), false);
+  });
+}

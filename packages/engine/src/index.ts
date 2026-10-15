@@ -134,7 +134,7 @@ function drawAwareFallback(game: Chess, moves: Move[]): Move {
 
 /**
  * Selects a legal move without mutating the caller's position.
- * Minimax and alpha-beta respect search budgets. Alpha-beta is iterative;
+ * Minimax and alpha-beta respect search budgets and deepen iteratively;
  * a partially searched depth is discarded.
  */
 export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits = {}): Move | null {
@@ -177,20 +177,27 @@ export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits
   };
   if (level === 'minimax') {
     const maximizing = game.turn() === 'w';
-    let best = drawAwareFallback(game, moves), bestScore = maximizing ? -Infinity : Infinity;
-    try {
-      for (const move of moves) {
-        if (performance.now() >= ctx.deadline) throw ABORT;
-        game.move(move);
-        let score: number;
-        try { score = plainMinimax(game, 1, 1, ctx); }
-        finally { game.undo(); }
-        // Only compare fully evaluated root moves. An interrupted branch must
-        // not replace the legal fallback or the best completed candidate.
-        if (maximizing ? score > bestScore : score < bestScore) { best = move; bestScore = score; }
+    let best = drawAwareFallback(game, moves);
+    // Complete a cheap one-ply pass first. A partially searched deeper pass
+    // compares only a prefix of the legal moves and can hide a safer candidate.
+    for (let depth = 1; depth <= 2; depth++) {
+      let candidate = best, bestScore = maximizing ? -Infinity : Infinity;
+      try {
+        for (const move of moves) {
+          if (performance.now() >= ctx.deadline) throw ABORT;
+          game.move(move);
+          let score: number;
+          try { score = plainMinimax(game, depth - 1, 1, ctx); }
+          finally { game.undo(); }
+          if (maximizing ? score > bestScore : score < bestScore) {
+            candidate = move; bestScore = score;
+          }
+        }
+        best = candidate;
+      } catch (error) {
+        if (error !== ABORT) throw error;
+        break;
       }
-    } catch (error) {
-      if (error !== ABORT) throw error;
     }
     return best;
   }
