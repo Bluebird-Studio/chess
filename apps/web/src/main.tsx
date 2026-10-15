@@ -14,6 +14,7 @@ import { Learn } from './Learn';
 import { ResignDialog } from './ResignDialog';
 import { resigningColor } from './resignation';
 import { resolveMoveText } from './move-text';
+import { capturedPieces, captureDescription } from './captures';
 
 const glyphs: Record<string, string> = {
   wk:'♔', wq:'♕', wr:'♖', wb:'♗', wn:'♘', wp:'♙',
@@ -328,9 +329,11 @@ function App() {
     const name = color === 'w' ? 'White' : 'Black';
     const isYou = mode === 'online' && onlineColor === color;
     const isBot = mode === 'bot' && color === 'b';
+    const captured = capturedPieces(history, color);
+    const capturedColor = color === 'w' ? 'b' : 'w';
     return <div className={`player ${game.turn() === color && !result && !game.isGameOver() ? 'to-move' : ''}`}>
       <span className={`avatar ${color === 'w' ? 'light-avatar' : 'dark'}`}>{color === 'w' ? '♔' : '♚'}</span>
-      <div><b>{isBot ? levels.find(x => x.id === level)?.name : isYou ? `You · ${name}` : `${name} pieces`}</b><small>{isBot ? 'Computer opponent' : isYou || (mode === 'bot' && color === 'w') ? 'You' : mode === 'online' ? 'Online opponent' : 'Local player'}</small></div>
+      <div><b>{isBot ? levels.find(x => x.id === level)?.name : isYou ? `You · ${name}` : `${name} pieces`}</b><small>{isBot ? 'Computer opponent' : isYou || (mode === 'bot' && color === 'w') ? 'You' : mode === 'online' ? 'Online opponent' : 'Local player'}</small><span className="captured-pieces" role="img" aria-label={captureDescription(captured, color)} title={captureDescription(captured, color)}><span aria-hidden="true">{captured.length ? captured.map(piece => glyphs[capturedColor + piece]).join('') : '—'}</span></span></div>
       {mode === 'online' && onlineClocks ? <span className={`clock ${onlineClocks[color] < 30000 ? 'low-time' : ''}`} aria-label={`${name} time remaining`}>{formatClock(onlineClocks[color])}</span> : mode !== 'online' && timeControl > 0 ? <span className={`clock ${clockValues && clockValues[color] < 30000 ? 'low-time' : ''}`} aria-label={`${name} time remaining`}>{formatClock(clockValues?.[color] ?? timeControl)}</span> : <span className="player-side">{name.toUpperCase()}</span>}
     </div>;
   }

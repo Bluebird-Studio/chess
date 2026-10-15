@@ -140,3 +140,7 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .lesson-promotion { margin: 16px 0; padding: 16px; border: 1px solid #a6c596; border-radius: 12px; min-width: 0; }
 .lesson-promotion legend { padding: 0 8px; color: #d7edc9; }
 .lesson-promotion > button { margin-top: 12px; }
+
+.captured-pieces { display: block; min-height: 19px; margin-top: 5px; color: #d1dfcd; font-family: 'DejaVu Sans', 'Segoe UI Symbol', serif; font-size: 17px; line-height: 1.2; letter-spacing: -2px; overflow-wrap: anywhere; }
+.player > div { min-width: 0; }
+.player .clock, .player-side { flex-shrink: 0; }
