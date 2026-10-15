@@ -308,6 +308,12 @@ wss.on('connection', ws => {
         // The opponent declines implicitly by making a legal move.
         if (room.result || room.drawOffer !== color) room.drawOffer = undefined;
         broadcast(room, state(room));
+        // Natural endings use the same notification as resignation, agreement,
+        // and timeout. Publish the final board first so clients can render the
+        // mating/drawing move before announcing its result.
+        if (room.result) {
+          broadcast(room, { type: 'result', winner: room.result, reason: room.reason });
+        }
       }
     } catch {
       send(ws, { type: 'error', message: 'Invalid message' });
