@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Chess, type Square } from 'chess.js';
-import { readReplay, replayShortcut, replayStatus } from './replay';
+import { readReplay, readReplayFile, replayShortcut, replayStatus } from './replay';
 
 const pieces: Record<string, string> = { wk:'♔', wq:'♕', wr:'♖', wb:'♗', wn:'♘', wp:'♙', bk:'♚', bq:'♛', br:'♜', bb:'♝', bn:'♞', bp:'♟' };
 export function Analyze({ pgn, onClose }: { pgn: string; onClose: () => void }) {
@@ -8,6 +8,8 @@ export function Analyze({ pgn, onClose }: { pgn: string; onClose: () => void }) 
   const [ply, setPly] = useState(replay.moves.length);
   const [source, setSource] = useState('');
   const [error, setError] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importNotice, setImportNotice] = useState('');
   const [flipped, setFlipped] = useState(false);
   const game = useMemo(() => {
     const position = new Chess(replay.positions[0]);
@@ -26,8 +28,16 @@ export function Analyze({ pgn, onClose }: { pgn: string; onClose: () => void }) 
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   function importGame() {
-    try { const next = readReplay(source); setReplay(next); setPly(0); setError(''); }
-    catch (cause) { setError((cause as Error).message); }
+    try { const next = readReplay(source); setReplay(next); setPly(0); setError(''); setImportNotice('Pasted game imported.'); }
+    catch (cause) { setError((cause as Error).message); setImportNotice(''); }
+  }
+  async function importFile(file: File) {
+    setImporting(true); setError(''); setImportNotice('Opening file…');
+    try {
+      const next = await readReplayFile(file);
+      setReplay(next); setPly(0); setImportNotice(`Imported ${file.name}.`);
+    } catch (cause) { setError((cause as Error).message); setImportNotice(''); }
+    finally { setImporting(false); }
   }
   return <section className="analysis-workspace panel" aria-label="Analyze game" onKeyDown={event => {
     const target = event.target as HTMLElement;
@@ -56,7 +66,13 @@ export function Analyze({ pgn, onClose }: { pgn: string; onClose: () => void }) 
       </div><p role="status">{positionStatus}</p><small>Arrow keys step through moves · Home / End jump to start / finish</small><button onClick={() => setFlipped(!flipped)}>Flip board</button>
     </div><div className="analysis-tools">
       <h3>Moves</h3><div className="replay-moves">{replay.moves.length ? replay.moves.map((_, i) => <button key={i} aria-current={ply === i + 1 ? 'step' : undefined} onClick={() => setPly(i + 1)}>{replay.details[i].label}</button>) : <p>No moves in this position.</p>}</div>
-      <label htmlFor="analysis-import">IMPORT PGN OR FEN</label><textarea id="analysis-import" value={source} onChange={event => setSource(event.target.value)} placeholder="Paste a game or position…" spellCheck={false}/><button onClick={importGame}>Import game</button>
+      <label htmlFor="analysis-file">OPEN A PGN OR FEN FILE</label><input id="analysis-file" type="file" accept=".pgn,.fen,.txt" disabled={importing} aria-describedby="analysis-file-help" onChange={event => {
+        const file = event.currentTarget.files?.[0];
+        event.currentTarget.value = '';
+        if (file) void importFile(file);
+      }}/><small id="analysis-file-help">One game or position, up to 1 MB. Files stay on your device.</small>
+      <p role="status">{importNotice}</p>
+      <label htmlFor="analysis-import">OR PASTE PGN OR FEN</label><textarea id="analysis-import" value={source} onChange={event => setSource(event.target.value)} placeholder="Paste a game or position…" spellCheck={false}/><button disabled={importing} onClick={importGame}>Import game</button>
       {error && <p role="alert" className="analysis-error">{error}</p>}
       <label htmlFor="analysis-fen">CURRENT POSITION · FEN</label><textarea id="analysis-fen" readOnly value={game.fen()} onFocus={event => event.target.select()} spellCheck={false}/>
       <label htmlFor="analysis-pgn">FULL GAME · PGN</label><textarea id="analysis-pgn" readOnly value={replay.pgn} onFocus={event => event.target.select()} spellCheck={false}/><div className="analysis-exports"><button onClick={() => download('pgn')}>Download PGN</button><button onClick={() => download('fen')}>Download FEN</button></div><small>Select an export field to copy it. Replay provides position review; engine evaluation is not included.</small>

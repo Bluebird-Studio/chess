@@ -1,7 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Chess } from 'chess.js';
-import { readReplay, replayShortcut, replayStatus } from './replay';
+import { readReplay, readReplayFile, replayShortcut, replayStatus } from './replay';
+
+test('file import accepts BOM-prefixed PGN and exported FEN positions', async () => {
+  const replay = await readReplayFile(new File(['\uFEFF1. e4 e5 2. Nf3 *'], 'game.pgn'));
+  assert.deepEqual(replay.moves, ['e4', 'e5', 'Nf3']);
+  const fen = replay.positions.at(-1)!;
+  assert.deepEqual((await readReplayFile(new File([fen], 'position.fen'))).positions, [fen]);
+});
+
+test('file import rejects oversized files before reading and reports read or parse failures', async () => {
+  await assert.rejects(readReplayFile({ size: 1024 * 1024 + 1, text: () => { throw new Error('must not read'); } }), /smaller than 1 MB/);
+  await assert.rejects(readReplayFile({ size: 8, text: async () => { throw new Error('unavailable'); } }), /could not be opened/);
+  await assert.rejects(readReplayFile(new File(['not a game'], 'broken.pgn')), /could not be read/);
+  await assert.rejects(readReplayFile(new File([], 'empty.pgn')), /Paste a PGN/);
+});
 
 test('replay includes initial position and every ply without changing the source game', () => {
   const game = new Chess();
