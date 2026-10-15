@@ -22,7 +22,7 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   let white:WebSocket|undefined;
   for(let i=0;i<50;i++){try{white=await new Promise<WebSocket>((resolve,reject)=>{const socket=new WebSocket('ws://127.0.0.1:'+port);socket.once('open',()=>resolve(socket));socket.once('error',reject)});break}catch{await delay(100)}}
   assert.ok(white);clients.push(white);
-  const whiteInbox=inbox(white);
+  let whiteInbox=inbox(white);
   white.send(JSON.stringify({type:'create'}));
   const joined=await whiteInbox(m=>m.type==='joined');
   assert.equal(joined.color,'w');
@@ -41,9 +41,25 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   assert.equal((await whiteInbox(m=>m.type==='error')).message,'Invalid message');
   black.send(JSON.stringify({type:'move',from:'e7',to:'e5'}));
   assert.deepEqual((await whiteInbox(m=>m.type==='state'&&m.history.length===2)).history,['e4','e5']);
+  white.send(JSON.stringify({type:'offer_draw'}));
+  await blackInbox(m=>m.type==='draw_offered');
   white.send(JSON.stringify({type:'resign'}));
   assert.deepEqual(await blackInbox(m=>m.type==='result'),{type:'result',winner:'black',reason:'resignation'});
   await whiteInbox(m=>m.type==='result');
+  const resignedSeat = await new Promise<WebSocket>((resolve,reject)=>{
+   const socket=new WebSocket('ws://127.0.0.1:'+port);
+   socket.once('open',()=>resolve(socket));socket.once('error',reject);
+  });
+  clients.push(resignedSeat);const resignedInbox=inbox(resignedSeat);
+  resignedSeat.send(JSON.stringify({type:'reconnect',roomId:joined.roomId,token:joined.token}));
+  await resignedInbox(m=>m.type==='joined');
+  const resigned=await resignedInbox(m=>m.type==='state');
+  assert.equal(resigned.reason,'resignation');
+  assert.equal(resigned.drawOffer,undefined,'resignation clears a pending offer');
+  assert.equal(resigned.activeClock,undefined);
+  white=resignedSeat;
+  // Read subsequent responses from the replaced seat.
+  whiteInbox=resignedInbox;
   white.send(JSON.stringify({type:'move',from:'g1',to:'f3'}));
   white.send(JSON.stringify({type:'rematch'}));
   assert.equal((await blackInbox(m=>m.type==='rematch_requested')).color,'w');
@@ -239,9 +255,20 @@ test('authoritative clocks start with both players, apply increments, and adjudi
     assert.equal(afterMove.activeClock, 'b');
     assert.ok(afterMove.clocks.w > 1800 && afterMove.clocks.w <= 1920);
     assert.ok(afterMove.clocks.b >= 1750 && afterMove.clocks.b <= 1800);
+    white.send(JSON.stringify({ type: 'offer_draw' }));
+    await readBlack(m => m.type === 'draw_offered');
     const result = await readBlack(m => m.type === 'result' && m.reason === 'timeout');
     assert.equal(result.winner, 'white');
     assert.deepEqual(await readWhite(m => m.type === 'result' && m.reason === 'timeout'), result);
+    const returned = await connect();
+    const readReturned = inbox(returned);
+    returned.send(JSON.stringify({ type: 'reconnect', roomId: created.roomId, token: created.token }));
+    await readReturned(m => m.type === 'joined');
+    const finished = await readReturned(m => m.type === 'state');
+    assert.equal(finished.reason, 'timeout');
+    assert.equal(finished.drawOffer, undefined, 'timeout clears a pending offer');
+    assert.equal(finished.activeClock, undefined);
+    assert.equal(finished.clocks.b, 0);
   } finally {
     for (const ws of clients) ws.terminate();
     child.kill('SIGTERM');
