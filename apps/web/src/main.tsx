@@ -43,6 +43,7 @@ function App() {
     try { return readSavedSeat(sessionStorage.getItem('bluebird:last-seat')); } catch { return null; }
   });
   const [timeControl, setTimeControl] = useState(0);
+  const [increment, setIncrement] = useState(0);
   const [clock, setClock] = useState<ClockState | null>(null);
   const clockHistory = useRef<ClockState[]>([]);
   const [now, setNow] = useState(Date.now);
@@ -129,7 +130,7 @@ function App() {
     const current = clock ?? { w: timeControl, b: timeControl, active: game.turn(), since: timestamp };
     if (remaining(current, timestamp)[game.turn()] === 0) { setNow(timestamp); return false; }
     clockHistory.current.push({ ...remaining(current, timestamp), active: current.active, since: timestamp });
-    setClock(switchClock(current, timestamp)); setNow(timestamp);
+    setClock(switchClock(current, timestamp, increment)); setNow(timestamp);
     return true;
   }
 
@@ -401,7 +402,7 @@ function App() {
             <select id="bot" value={level} onChange={e => { setLevel(e.target.value as BotLevel); reset(); }}>{levels.map(l => <option value={l.id} key={l.id}>{l.name}</option>)}</select>
             <small>{levels.find(l => l.id === level)?.description}</small>
           </div>}
-          {mode !== 'online' && <div className="bot-select"><label htmlFor="time-control">TIME PER PLAYER</label><select id="time-control" value={timeControl} onChange={e => { reset(); setTimeControl(Number(e.target.value)); }}><option value={0}>Untimed · take your time</option><option value={300000}>5 minutes · blitz</option><option value={600000}>10 minutes · rapid</option></select><small>{clock ? 'Clock running. Each move starts your opponent’s time.' : 'The clock starts after White’s first move.'}</small></div>}
+          {mode !== 'online' && <div className="bot-select"><label htmlFor="time-control">TIME PER PLAYER</label><select id="time-control" value={timeControl} onChange={e => { reset(); setTimeControl(Number(e.target.value)); }}><option value={0}>Untimed · take your time</option><option value={300000}>5 minutes · blitz</option><option value={600000}>10 minutes · rapid</option></select><label htmlFor="clock-increment">SECONDS ADDED PER MOVE</label><select id="clock-increment" value={increment} disabled={!timeControl} onChange={event => { reset(); setIncrement(Number(event.target.value)); }}><option value={0}>No increment</option><option value={2000}>+2 seconds</option><option value={3000}>+3 seconds</option><option value={5000}>+5 seconds</option><option value={10000}>+10 seconds</option></select><small>{clock ? `Clock running. Each move adds ${increment / 1000} seconds and starts your opponent’s time.` : 'The clock starts after White’s first move.'}</small></div>}
           <div className="status" role="status" aria-live="polite"><span className="status-dot"/><span>{botTurn ? 'Computer is thinking…' : status}</span></div>
           <form className="move-entry" onSubmit={event => {
             event.preventDefault();
