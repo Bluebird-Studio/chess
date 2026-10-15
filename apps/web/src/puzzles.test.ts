@@ -39,3 +39,17 @@ test('revealed solutions provide matching notation and coordinates without chang
   }
   assert.throws(() => puzzleSolution({ ...puzzles[0], solution: 'g6g5' }), /must be checkmate/);
 });
+
+test('typed solutions work in SAN and coordinate notation for every exercise without mutating its board', async () => {
+  const { resolveMoveText } = await import('./move-text');
+  for (const puzzle of puzzles) {
+    const game = new Chess(puzzle.fen);
+    const answer = puzzleSolution(puzzle);
+    for (const text of [answer.san, answer.san.replace('#', ''), puzzle.solution]) {
+      const move = resolveMoveText(game, text);
+      assert.equal(tryPuzzleMove(puzzle.fen, move.from, move.to)?.solved, true);
+      assert.equal(game.fen(), puzzle.fen);
+    }
+    assert.throws(() => resolveMoveText(game, 'not a move'), /not legal/);
+  }
+});

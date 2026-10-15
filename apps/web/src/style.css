@@ -117,3 +117,7 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .candidate-preview .analysis-exports button[aria-pressed="true"] { background: #254b3e; color: #fff; border-color: #a6c596; }
 .candidate-preview small { margin-top: 12px; color: #a9bcae; }
 .candidate-preview-notice { margin: 0 0 12px; padding: 10px 14px; border-left: 3px solid #a6c596; background: #ffffff08; color: #d7edc9; line-height: 1.5; }
+
+.lesson-move-input { display: grid; gap: 10px; padding: 16px; border: 1px solid #ffffff20; border-radius: 12px; }
+.lesson-move-input input { width: 100%; min-width: 0; box-sizing: border-box; padding: 12px; border: 1px solid #ffffff20; border-radius: 8px; background: #111b16; color: inherit; font: inherit; }
+.lesson-move-input input[aria-invalid="true"] { border-color: #df8d79; }
