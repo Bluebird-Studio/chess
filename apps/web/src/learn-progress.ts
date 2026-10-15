@@ -11,3 +11,13 @@ export function saveCompleted(storage: Pick<Storage, 'setItem'>, completed: read
   try { storage.setItem(LEARN_PROGRESS_KEY, JSON.stringify(completed)); }
   catch { /* Practice remains available when browser storage is unavailable. */ }
 }
+
+/** Continue in exercise order, wrapping to unfinished work before offering review. */
+export function nextExerciseIndex(ids: readonly string[], completed: readonly string[], current: number): number {
+  if (!ids.length) return 0;
+  for (let offset = 1; offset <= ids.length; offset++) {
+    const index = (current + offset) % ids.length;
+    if (!completed.includes(ids[index])) return index;
+  }
+  return (current + 1) % ids.length;
+}
