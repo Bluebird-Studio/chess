@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Chess, type Square } from 'chess.js';
 import { puzzles, puzzleSolution, tryPuzzleMove } from './puzzles';
-import { readCompleted, saveCompleted } from './learn-progress';
+import { nextExerciseIndex, readCompleted, saveCompleted } from './learn-progress';
 import { boardFocusIndex } from './board-input';
 
 const glyphs: Record<string, string> = { wk:'♔', wq:'♕', wr:'♖', wb:'♗', wn:'♘', wp:'♙', bk:'♚', bq:'♛', br:'♜', bb:'♝', bn:'♞', bp:'♟' };
@@ -17,6 +17,7 @@ export function Learn({ onClose }: { onClose: () => void }) {
   const puzzle = puzzles[index];
   const [fen, setFen] = useState(puzzle.fen);
   const [selected, setSelected] = useState<Square | null>(null);
+  const [lastMove, setLastMove] = useState<{ from: Square; to: Square } | null>(null);
   const [solved, setSolved] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [hint, setHint] = useState(false);
@@ -34,7 +35,7 @@ export function Learn({ onClose }: { onClose: () => void }) {
     setSelected(null);
     if (!attempt) { setMessage('That move is not legal. Choose your piece again.'); return; }
     if (!attempt.solved) { setMessage('A legal move, but there is a mate in one. Try again.'); return; }
-    setFen(attempt.fen); setSolved(true); setMessage(puzzle.explanation);
+    setFen(attempt.fen); setLastMove({ from: selected, to: square }); setSolved(true); setMessage(puzzle.explanation);
     if (!completed.includes(puzzle.id)) {
       const updated = [...completed, puzzle.id];
       setCompleted(updated);
@@ -42,7 +43,7 @@ export function Learn({ onClose }: { onClose: () => void }) {
     }
   }
   function openExercise(nextIndex: number) {
-    setIndex(nextIndex); setFen(puzzles[nextIndex].fen); setSelected(null); setSolved(false); setRevealed(false); setHint(false);
+    setLastMove(null); setIndex(nextIndex); setFen(puzzles[nextIndex].fen); setSelected(null); setSolved(false); setRevealed(false); setHint(false);
     setMessage('Select a piece, then its destination.');
   }
   return <section className="analysis-workspace panel" aria-label="Learn chess">
@@ -59,12 +60,12 @@ export function Learn({ onClose }: { onClose: () => void }) {
           if (next === null) return;
           event.preventDefault();
           event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('button.square')[next]?.focus();
-        }} onClick={() => select(square)} aria-label={`${square}${piece ? ` ${piece.color === 'w' ? 'White' : 'Black'} ${({ k:'king', q:'queen', r:'rook', b:'bishop', n:'knight', p:'pawn' })[piece.type]}` : ''}`} aria-pressed={selected === square} aria-disabled={solved || revealed} aria-description={legal.includes(square) ? 'Legal destination' : undefined} className={`square ${(file + rank) % 2 === 0 ? 'light' : 'dark'} ${selected === square ? 'active' : ''} ${legal.includes(square) ? 'target' : ''}`}><span className={`piece ${piece?.color === 'w' ? 'white-piece' : 'black-piece'}`}>{piece ? glyphs[piece.color + piece.type] : ''}</span>{i % 8 === 0 && <span className="rank">{rank}</span>}{i >= 56 && <span className="file">{square[0]}</span>}</button>;
+        }} onClick={() => select(square)} aria-label={`${square}${piece ? ` ${piece.color === 'w' ? 'White' : 'Black'} ${({ k:'king', q:'queen', r:'rook', b:'bishop', n:'knight', p:'pawn' })[piece.type]}` : ''}`} aria-pressed={selected === square} aria-disabled={solved || revealed} aria-description={legal.includes(square) ? 'Legal destination' : undefined} className={`square ${(file + rank) % 2 === 0 ? 'light' : 'dark'} ${lastMove && (lastMove.from === square || lastMove.to === square) ? 'last-move' : ''} ${game.isCheck() && piece?.type === 'k' && piece.color === game.turn() ? 'in-check' : ''} ${selected === square ? 'active' : ''} ${legal.includes(square) ? 'target' : ''}`}><span className={`piece ${piece?.color === 'w' ? 'white-piece' : 'black-piece'}`}>{piece ? glyphs[piece.color + piece.type] : ''}</span>{i % 8 === 0 && <span className="rank">{rank}</span>}{i >= 56 && <span className="file">{square[0]}</span>}</button>;
       })}
     </div><div className="analysis-tools lesson-copy"><span className="eyebrow">EXERCISE {index + 1} OF {puzzles.length}</span><p aria-label="Exercise progress">{completed.length} of {puzzles.length} exercises completed{completed.length === puzzles.length ? ' · All complete' : ''}</p><progress value={completed.length} max={puzzles.length} aria-label="Completed exercises" /><label htmlFor="learn-exercise">CHOOSE AN EXERCISE</label><select id="learn-exercise" value={index} onChange={event => openExercise(Number(event.target.value))}>{puzzles.map((item, i) => <option key={item.id} value={i}>{i + 1}. {item.title}{completed.includes(item.id) ? ' · Completed' : ''}</option>)}</select><h3>{puzzle.title}{completed.includes(puzzle.id) && <span className="lesson-completed"> ✓ Completed</span>}</h3><p>{sideName} to move · Checkmate in one</p><p role="status" className={solved || revealed ? 'lesson-success' : ''}>{message}</p>{!solved && !revealed && <button onClick={() => setHint(true)}>Show a hint</button>}{hint && !solved && !revealed && <><p>{puzzle.hint}</p><button onClick={() => {
         const solution = puzzleSolution(puzzle);
-        setFen(solution.fen); setSelected(null); setRevealed(true);
+        setFen(solution.fen); setLastMove(solution); setSelected(null); setRevealed(true);
         setMessage(`${solution.san} · ${puzzle.explanation} Restart to solve this exercise yourself; viewing the solution does not mark it complete.`);
-      }}>Show the solution</button></>}{(solved || revealed) && <button onClick={() => openExercise((index + 1) % puzzles.length)}>{index === puzzles.length - 1 ? 'Practice again' : 'Next exercise'} →</button>}<button onClick={() => openExercise(index)}>Restart exercise</button><small>Arrow keys move between squares · Enter selects · Escape clears selection.</small><small>Progress is saved on this device when browser storage is available. Original teaching positions. Take your time; incorrect moves leave the position ready for another try.</small></div></div>
+      }}>Show the solution</button></>}{(solved || revealed) && <button onClick={() => openExercise(nextExerciseIndex(puzzles.map(item => item.id), completed, index))}>{completed.length === puzzles.length ? 'Review another exercise' : 'Next unfinished exercise'} →</button>}<button onClick={() => openExercise(index)}>Restart exercise</button><small>Arrow keys move between squares · Enter selects · Escape clears selection.</small><small>Progress is saved on this device when browser storage is available. Original teaching positions. Take your time; incorrect moves leave the position ready for another try.</small></div></div>
   </section>;
 }
