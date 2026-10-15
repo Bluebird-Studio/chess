@@ -181,7 +181,15 @@ wss.on('connection', ws => {
         roomId = id;
         send(ws, { type: 'joined', roomId: id, color, token: msg.token, fen: room.game.fen(), reconnected: true });
         send(ws, state(room));
-        broadcast(room, { type: 'opponent_reconnected', color });
+        // Notify only the other seat: reconnecting is not evidence that the
+        // opponent is present (both players may have lost their connection).
+        for (const [peer, seat] of room.players) {
+          if (seat !== color) send(peer, { type: 'opponent_reconnected', color });
+        }
+        const opponent = color === 'w' ? 'b' : 'w';
+        if (room.tokens[opponent] && ![...room.players.values()].includes(opponent)) {
+          send(ws, { type: 'opponent_disconnected' });
+        }
         return;
       }
 
