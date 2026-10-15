@@ -284,11 +284,14 @@ wss.on('connection', ws => {
           return;
         }
         const from = msg.from as Square, to = msg.to as Square;
-        if (typeof from !== 'string' || typeof to !== 'string') {
+        if (typeof from !== 'string' || !/^[a-h][1-8]$/.test(from) ||
+            typeof to !== 'string' || !/^[a-h][1-8]$/.test(to) ||
+            (msg.promotion !== undefined &&
+              (typeof msg.promotion !== 'string' || !/^[qrbn]$/.test(msg.promotion)))) {
           send(ws, { type: 'error', message: 'Invalid move' });
           return;
         }
-        try { room.game.move({ from, to, promotion: msg.promotion || 'q' }); }
+        try { room.game.move({ from, to, promotion: msg.promotion ?? 'q' }); }
         catch { send(ws, { type: 'error', message: 'Illegal move' }); return; }
         room.remaining[color] += room.increment;
         room.turnStartedAt = room.game.isGameOver() ? undefined : Date.now();
