@@ -52,6 +52,11 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   white.send(JSON.stringify({type:'resign'}));
   assert.deepEqual(await blackInbox(m=>m.type==='result'),{type:'result',winner:'black',reason:'resignation'});
   await whiteInbox(m=>m.type==='result');
+  const resignationState = await blackInbox(m=>m.type==='state'&&m.reason==='resignation');
+  assert.equal(resignationState.result,'black');
+  assert.equal(resignationState.gameOver,true);
+  assert.equal(resignationState.activeClock,undefined);
+  assert.equal(resignationState.drawOffer,undefined);
   const resignedSeat = await new Promise<WebSocket>((resolve,reject)=>{
    const socket=new WebSocket('ws://127.0.0.1:'+port);
    socket.once('open',()=>resolve(socket));socket.once('error',reject);
@@ -92,6 +97,11 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   black.send(JSON.stringify({type:'accept_draw'}));
   assert.deepEqual(await whiteInbox(m=>m.type==='result'),{type:'result',winner:'draw',reason:'agreement'});
   assert.deepEqual(await blackInbox(m=>m.type==='result'),{type:'result',winner:'draw',reason:'agreement'});
+  const agreementState = await whiteInbox(m=>m.type==='state'&&m.reason==='agreement');
+  assert.equal(agreementState.result,'draw');
+  assert.equal(agreementState.gameOver,true);
+  assert.equal(agreementState.activeClock,undefined);
+  assert.equal(agreementState.drawOffer,undefined);
   // Reclaiming a finished seat must preserve the result and its reason.
   const recovered = await new Promise<WebSocket>((resolve,reject)=>{
    const socket=new WebSocket('ws://127.0.0.1:'+port);
@@ -267,6 +277,13 @@ test('authoritative clocks start with both players, apply increments, and adjudi
     const result = await readBlack(m => m.type === 'result' && m.reason === 'timeout');
     assert.equal(result.winner, 'white');
     assert.deepEqual(await readWhite(m => m.type === 'result' && m.reason === 'timeout'), result);
+    const finalWhite = await readWhite(m => m.type === 'state' && m.reason === 'timeout');
+    const finalBlack = await readBlack(m => m.type === 'state' && m.reason === 'timeout');
+    assert.deepEqual(finalWhite, finalBlack, 'both seats receive identical final clocks');
+    assert.equal(finalWhite.clocks.b, 0);
+    assert.equal(finalWhite.activeClock, undefined);
+    assert.equal(finalWhite.gameOver, true);
+    assert.equal(finalWhite.drawOffer, undefined);
     const returned = await connect();
     const readReturned = inbox(returned);
     returned.send(JSON.stringify({ type: 'reconnect', roomId: created.roomId, token: created.token }));
