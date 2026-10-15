@@ -314,3 +314,54 @@ test('waiting rooms reject gameplay actions and reconnect without starting the c
     child.kill('SIGTERM');
   }
 });
+
+test('heartbeat detects silent peers and preserves their seat for reconnect', { timeout: 15000 }, async () => {
+  const port = 30000 + Math.floor(Math.random() * 2000);
+  const child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
+    cwd: serverDir, env: { ...process.env, PORT: String(port), HEARTBEAT_MS: '200' }, stdio: 'pipe'
+  });
+  const clients: WebSocket[] = [];
+  async function connect(autoPong = true) {
+    for (let i = 0; i < 50; i++) {
+      try {
+        const ws = await new Promise<WebSocket>((resolve, reject) => {
+          const socket = new WebSocket('ws://127.0.0.1:' + port, { autoPong });
+          socket.once('open', () => resolve(socket));
+          socket.once('error', reject);
+        });
+        clients.push(ws);
+        return ws;
+      } catch { await delay(100); }
+    }
+    throw Error('Server did not start');
+  }
+  try {
+    const white = await connect();
+    const readWhite = inbox(white);
+    white.send(JSON.stringify({ type: 'create' }));
+    const created = await readWhite(m => m.type === 'joined');
+    const black = await connect(false);
+    const readBlack = inbox(black);
+    black.send(JSON.stringify({ type: 'join', roomId: created.roomId }));
+    const joined = await readBlack(m => m.type === 'joined');
+    await readWhite(m => m.type === 'state');
+    white.send(JSON.stringify({ type: 'move', from: 'e2', to: 'e4' }));
+    const before = await readWhite(m => m.type === 'state' && m.history.length === 1);
+    await readWhite(m => m.type === 'opponent_disconnected');
+    assert.equal(white.readyState, WebSocket.OPEN, 'responsive peers survive heartbeat checks');
+
+    const recovered = await connect();
+    const readRecovered = inbox(recovered);
+    recovered.send(JSON.stringify({ type: 'reconnect', roomId: created.roomId, token: joined.token }));
+    await readRecovered(m => m.type === 'joined');
+    const restored = await readRecovered(m => m.type === 'state');
+    assert.deepEqual(restored.history, ['e4']);
+    assert.equal(restored.activeClock, 'b');
+    assert.ok(restored.clocks.b < before.clocks.b, 'clock keeps running during silent disconnect');
+    recovered.send(JSON.stringify({ type: 'move', from: 'e7', to: 'e5' }));
+    assert.deepEqual((await readWhite(m => m.type === 'state' && m.history.length === 2)).history, ['e4', 'e5']);
+  } finally {
+    for (const ws of clients) ws.terminate();
+    child.kill('SIGTERM');
+  }
+});
