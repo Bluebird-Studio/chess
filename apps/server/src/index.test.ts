@@ -143,6 +143,29 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   assert.equal(repetition.gameOver,true);assert.equal(repetition.result,'draw');
   assert.equal(repetition.reason,'threefold_repetition');assert.equal(repetition.activeClock,undefined);
 
+  await rematch();
+  await play([
+   ['a2','a4'],['h7','h5'],['a4','a5'],['h5','h4'],
+   ['a5','a6'],['h4','h3'],['a6','b7'],['h3','g2']
+  ]);
+  for (const promotion of [null, false, '', 'king', 'Q', 7, {}]) {
+   recovered.send(JSON.stringify({type:'move',from:'b7',to:'a8',promotion}));
+   assert.equal((await recoveredInbox(m=>m.type==='error')).message,'Invalid move');
+  }
+  for (const [from,to] of [['b7','a9'],['B7','a8'],['b7','a8extra']]) {
+   recovered.send(JSON.stringify({type:'move',from,to}));
+   assert.equal((await recoveredInbox(m=>m.type==='error')).message,'Invalid move');
+  }
+  recovered.send(JSON.stringify({type:'move',from:'b7',to:'a8',promotion:'n'}));
+  const promoted=await recoveredInbox(m=>m.type==='state'&&m.history.length===9);
+  const opponentPromotion=await blackInbox(m=>m.type==='state'&&m.history.length===9);
+  assert.deepEqual(promoted,opponentPromotion,'both seats see the same underpromotion');
+  assert.equal(promoted.history[8],'bxa8=N');
+  assert.ok(promoted.fen.startsWith('Nnbqkbnr/'),'the server preserves the chosen knight');
+  assert.equal(promoted.activeClock,'b');
+  assert.equal(promoted.gameOver,false,'rejected promotion inputs leave the game playable');
+
+
  }finally{for(const ws of clients)ws.terminate();child.kill('SIGTERM')}
 });
 
