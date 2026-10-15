@@ -147,7 +147,14 @@ export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits
   // finished game before material scoring or a search budget can hide the win.
   const mate = moves.find(move => move.san.endsWith('#'));
   if (mate) return mate;
-  if (level === 'greedy') return drawAwareFallback(game, moves);
+  if (level === 'greedy') {
+    // Search ordering favors valuable victims and cheap attackers, but those
+    // weights are not material gains: a queen promotion gains eight pawns.
+    const gain = (move: Move) => (move.captured ? PIECE[move.captured] : 0) +
+      (move.promotion ? PIECE[move.promotion] - PIECE.p : 0);
+    const greedyMoves = [...moves].sort((a, b) => gain(b) - gain(a));
+    return drawAwareFallback(game, greedyMoves);
+  }
   if (level === 'positional') {
     const maximizing = game.turn() === 'w';
     let best = moves[0], bestScore = maximizing ? -Infinity : Infinity;
