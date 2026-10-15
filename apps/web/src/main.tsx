@@ -5,7 +5,7 @@ import { RotateCcw, Undo2, Crown, ArrowLeftRight, Volume2, VolumeX, Flag, Handsh
 import { selectBotMove, type BotLevel } from '@bluebird/chess-engine';
 import { restoreOnlineGame } from './online-game';
 import { remaining, switchClock, formatClock, type ClockState } from './clock';
-import { squareAtPoint } from './board-input';
+import { boardFocusIndex, squareAtPoint } from './board-input';
 import { inviteLink, inviteRoom, readSavedSeat } from './invite';
 import './style.css';
 
@@ -54,6 +54,8 @@ function App() {
   const [drawOffer, setDrawOffer] = useState<'w' | 'b' | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const [focusedSquare, setFocusedSquare] = useState<Square>('e2');
+  const promotionRef = useRef<HTMLDivElement | null>(null);
   const boardRef = useRef<HTMLDivElement | null>(null);
   const touchRef = useRef<{ id: number; from: Square; x: number; y: number; dragging: boolean } | null>(null);
   const suppressClickUntil = useRef(0);
@@ -62,6 +64,12 @@ function App() {
   useEffect(() => {
     touchRef.current = null; setTouchDrag(null);
   }, [game, mode, flipped, result, connection]);
+  useEffect(() => {
+    if (!promotion) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    promotionRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    return () => previousFocus?.focus();
+  }, [promotion]);
   const onlineFen = useRef<string | null>(null);
 
   const history = game.history({ verbose: true });
@@ -286,10 +294,8 @@ function App() {
     if (to) attemptMove(touch.from, to);
   }
   function onBoardKey(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
-    const step = ({ ArrowLeft:-1, ArrowRight:1, ArrowUp:-8, ArrowDown:8 } as Record<string, number>)[event.key];
-    if (step === undefined) return;
-    const next = index + step;
-    if (next < 0 || next >= 64 || (Math.abs(step) === 1 && Math.floor(next / 8) !== Math.floor(index / 8))) return;
+    const next = boardFocusIndex(index, event.key, event.ctrlKey || event.metaKey);
+    if (next === null) return;
     event.preventDefault();
     const cells = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('button.square');
     cells?.[next]?.focus();
@@ -318,7 +324,7 @@ function App() {
         <h1>Make your <em>move.</em></h1>
         <p className="lead">A timeless game. A beautiful place to play.</p>
         {renderPlayer(flipped ? 'w' : 'b')}
-        <div ref={boardRef} className="board" role="group" aria-label="Chessboard. Select a piece, then its destination. Arrow keys move focus.">
+        <div ref={boardRef} className="board" role="group" aria-label="Chessboard. Select a piece, then its destination. Arrow keys move focus. Home and End jump within a rank. Enter selects a piece or destination.">
           {squares.map((sq, i) => {
             const piece = game.get(sq);
             const isLight = (files.indexOf(sq[0]) + Number(sq[1])) % 2 === 0;
@@ -328,6 +334,7 @@ function App() {
             const check = checkedKing === sq;
             return <button type="button" key={sq}
               aria-label={`${sq}, ${piece ? `${piece.color === 'w' ? 'white' : 'black'} ${({p:'pawn',n:'knight',b:'bishop',r:'rook',q:'queen',k:'king'} as Record<string,string>)[piece.type]}` : 'empty'}${target ? ', legal destination' : ''}${check ? ', king in check' : ''}`}
+              tabIndex={focusedSquare === sq ? 0 : -1} onFocus={() => setFocusedSquare(sq)}
               aria-pressed={active} onClick={e => { if (e.detail === 0 || Date.now() >= suppressClickUntil.current) click(sq); }}
               onPointerDown={e => touchStart(e, sq)} onPointerMove={touchMove} onPointerUp={e => touchEnd(e)} onPointerCancel={e => touchEnd(e, true)} onLostPointerCapture={e => touchEnd(e, true)} onKeyDown={e => { if (e.key === 'Escape') setSelected(null); else onBoardKey(e, i); }}
               draggable={canInteract && piece?.color === game.turn()}
@@ -390,7 +397,15 @@ function App() {
     </main>
     {touchDrag && <span aria-hidden="true" className={`touch-piece piece ${game.get(touchDrag.from)?.color === 'w' ? 'white-piece' : 'black-piece'}`} style={{ left: touchDrag.x, top: touchDrag.y }}>{glyphs[(game.get(touchDrag.from)?.color ?? '') + (game.get(touchDrag.from)?.type ?? '')]}</span>}
     {promotion && <div className="modal-backdrop" onClick={() => setPromotion(null)}>
-      <div className="promotion-dialog" role="dialog" aria-modal="true" aria-labelledby="promotion-title" onClick={e => e.stopPropagation()}>
+      <div ref={promotionRef} className="promotion-dialog" onKeyDown={event => {
+        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setPromotion(null); }
+        if (event.key === 'Tab') {
+          const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button'));
+          const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+          event.preventDefault();
+          buttons[(index + (event.shiftKey ? -1 : 1) + buttons.length) % buttons.length]?.focus();
+        }
+      }} role="dialog" aria-modal="true" aria-labelledby="promotion-title" onClick={e => e.stopPropagation()}>
         <span className="eyebrow">YOUR MOVE</span><h2 id="promotion-title">Choose a promotion</h2>
         <p>What should your pawn become?</p>
         <div className="promotion-options">{promotionPieces.map(p => <button key={p} aria-label={`Promote to ${({q:'queen',r:'rook',b:'bishop',n:'knight'} as Record<string,string>)[p]}`} onClick={() => commitMove(promotion.from, promotion.to, p)}>{glyphs[promotion.color + p]}</button>)}</div>
