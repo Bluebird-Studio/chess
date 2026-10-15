@@ -41,12 +41,20 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   assert.deepEqual((await whiteInbox(m=>m.type==='state'&&m.history.length===2)).history,['e4','e5']);
   white.send(JSON.stringify({type:'resign'}));
   assert.deepEqual(await blackInbox(m=>m.type==='result'),{type:'result',winner:'black',reason:'resignation'});
+  await whiteInbox(m=>m.type==='result');
   white.send(JSON.stringify({type:'move',from:'g1',to:'f3'}));
   white.send(JSON.stringify({type:'rematch'}));
   assert.equal((await blackInbox(m=>m.type==='rematch_requested')).color,'w');
   black.send(JSON.stringify({type:'rematch'}));
   assert.equal((await whiteInbox(m=>m.type==='state'&&m.rematch===true)).history.length,0);
   assert.equal((await blackInbox(m=>m.type==='state'&&m.rematch===true)).gameOver,false);
+  white.send(JSON.stringify({type:'offer_draw'}));
+  assert.deepEqual(await blackInbox(m=>m.type==='draw_offered'),{type:'draw_offered',color:'w'});
+  white.send(JSON.stringify({type:'accept_draw'}));
+  assert.equal((await whiteInbox(m=>m.type==='error')).message,'No opponent draw offer to accept');
+  black.send(JSON.stringify({type:'accept_draw'}));
+  assert.deepEqual(await whiteInbox(m=>m.type==='result'),{type:'result',winner:'draw',reason:'agreement'});
+  assert.deepEqual(await blackInbox(m=>m.type==='result'),{type:'result',winner:'draw',reason:'agreement'});
  }finally{for(const ws of clients)ws.terminate();child.kill('SIGTERM')}
 });
 

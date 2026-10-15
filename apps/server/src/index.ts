@@ -8,6 +8,7 @@ type Room = {
   players: Map<WebSocket, Color>;
   tokens: Partial<Record<Color, string>>;
   result?: 'white' | 'black' | 'draw';
+  drawOffer?: Color;
   rematch: Set<Color>;
   expiry?: ReturnType<typeof setTimeout>;
 };
@@ -26,7 +27,8 @@ function state(room: Room) {
   return {
     type: 'state', fen: room.game.fen(), history: room.game.history(),
     gameOver: Boolean(room.result) || room.game.isGameOver(),
-    result: room.result
+    result: room.result,
+    drawOffer: room.drawOffer
   };
 }
 function cancelExpiry(room: Room) {
@@ -117,6 +119,33 @@ wss.on('connection', ws => {
         broadcast(room, { type: 'result', winner: room.result, reason: 'resignation' });
         return;
       }
+      if (msg.type === 'offer_draw') {
+        if (room.result || room.game.isGameOver()) return;
+        if (room.drawOffer) { send(ws, { type: 'error', message: 'A draw offer is already pending' }); return; }
+        room.drawOffer = color;
+        broadcast(room, { type: 'draw_offered', color });
+        return;
+      }
+      if (msg.type === 'accept_draw') {
+        if (room.result || room.game.isGameOver()) return;
+        if (!room.drawOffer || room.drawOffer === color) {
+          send(ws, { type: 'error', message: 'No opponent draw offer to accept' });
+          return;
+        }
+        room.drawOffer = undefined;
+        room.result = 'draw';
+        broadcast(room, { type: 'result', winner: 'draw', reason: 'agreement' });
+        return;
+      }
+      if (msg.type === 'decline_draw') {
+        if (!room.drawOffer || room.drawOffer === color) {
+          send(ws, { type: 'error', message: 'No opponent draw offer to decline' });
+          return;
+        }
+        room.drawOffer = undefined;
+        broadcast(room, { type: 'draw_declined' });
+        return;
+      }
       if (msg.type === 'rematch') {
         if (!room.result && !room.game.isGameOver()) return;
         room.rematch.add(color);
@@ -124,6 +153,7 @@ wss.on('connection', ws => {
         if (room.rematch.size === 2) {
           room.game = new Chess();
           room.result = undefined;
+          room.drawOffer = undefined;
           room.rematch.clear();
           broadcast(room, { ...state(room), rematch: true });
         }
@@ -135,6 +165,7 @@ wss.on('connection', ws => {
         if (typeof from !== 'string' || typeof to !== 'string') return;
         try { room.game.move({ from, to, promotion: msg.promotion || 'q' }); }
         catch { send(ws, { type: 'error', message: 'Illegal move' }); return; }
+        room.drawOffer = undefined;
         broadcast(room, state(room));
       }
     } catch {
@@ -148,6 +179,7 @@ wss.on('connection', ws => {
     if (!room || !room.players.has(ws)) return;
     room.players.delete(ws);
     room.rematch.clear();
+    room.drawOffer = undefined;
     broadcast(room, { type: 'opponent_disconnected' });
     scheduleExpiry(roomId, room);
   });
