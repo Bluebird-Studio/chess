@@ -83,3 +83,11 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 
 .analysis-exports { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .replay-controls:focus-visible { outline: 2px solid #c89859; outline-offset: 5px; border-radius: 6px; }
+
+.analysis-board button.square{padding:0;border:0;border-radius:0;cursor:pointer}
+.analysis-board .square.annotated:after{content:'';position:absolute;inset:12%;border:4px solid #9a4c18;border-radius:50%;pointer-events:none;z-index:2;box-shadow:0 0 0 1px #ffedc480}
+.annotation-controls{display:flex;align-items:center;gap:14px;margin-top:14px}
+.annotation-controls small{flex:1;color:#a9b9ac;line-height:1.6}
+.annotation-controls button{flex-shrink:0}
+@media(max-width:450px){.annotation-controls{align-items:flex-start;flex-direction:column}.analysis-board .square.annotated:after{border-width:3px}}
+.analysis-workspace .analysis-board button.square:focus-visible{outline:3px solid #f5da83;outline-offset:-4px;z-index:3}
