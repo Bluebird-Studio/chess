@@ -151,3 +151,34 @@ test('minimax also respects its node budget when the elapsed clock has not advan
   assert.equal(game.fen(), fen);
   assert.deepEqual(game.history(), []);
 });
+
+for (const level of ['minimax', 'alphabeta'] as const) {
+  for (const invalid of [NaN, Infinity, -Infinity]) {
+    test(`${level} falls back to a finite elapsed budget for ${invalid} limits`, t => {
+      const game = new Chess();
+      game.move('e4');
+      const fen = game.fen(), history = game.history();
+      let reads = 0;
+      t.mock.method(performance, 'now', () => ++reads * 200);
+      const move = selectBotMove(game, level, { maxNodes: invalid, maxTimeMs: invalid });
+      assert.ok(move && game.moves().includes(move.san));
+      assert.ok(reads <= 6, `invalid limits must retain the default deadline (${reads} clock reads)`);
+      assert.equal(game.fen(), fen);
+      assert.deepEqual(game.history(), history);
+    });
+
+    test(`${level} falls back to a finite node budget for ${invalid} limits`, t => {
+      const game = new Chess();
+      const fen = game.fen();
+      let reads = 0;
+      // Freeze time to prove the independent node safeguard remains enabled.
+      t.mock.method(performance, 'now', () => { reads++; return 0; });
+      const move = selectBotMove(game, level, { maxNodes: invalid, maxTimeMs: invalid });
+      assert.ok(move && game.moves().includes(move.san));
+      assert.ok(reads <= 8100, `invalid limits must retain the default node cap (${reads} clock reads)`);
+      if (level === 'alphabeta') assert.ok(reads >= 8000, 'exercise node exhaustion with time frozen');
+      assert.equal(game.fen(), fen);
+      assert.deepEqual(game.history(), []);
+    });
+  }
+}

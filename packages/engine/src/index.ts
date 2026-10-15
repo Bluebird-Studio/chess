@@ -142,8 +142,10 @@ export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits
   }
   const ctx: SearchContext = {
     nodes: 0,
-    maxNodes: Math.max(100, limits.maxNodes ?? 8000),
-    deadline: performance.now() + Math.max(50, limits.maxTimeMs ?? 650),
+    // Invalid limits must not disable both abort checks (comparisons with NaN
+    // are always false, while Infinity would allow unbounded search).
+    maxNodes: Number.isFinite(limits.maxNodes) ? Math.max(100, limits.maxNodes!) : 8000,
+    deadline: performance.now() + (Number.isFinite(limits.maxTimeMs) ? Math.max(50, limits.maxTimeMs!) : 650),
     table: new Map()
   };
   if (level === 'minimax') {
