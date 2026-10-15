@@ -30,3 +30,26 @@ test('preview rejects invalid prefixes and illegal candidate moves', () => {
   }
   assert.throws(() => candidatePreview(pgn, ['e5'], 1));
 });
+
+test('exported preview PGN round-trips source history and only the selected continuation', () => {
+  const source = new Chess();
+  for (const move of ['e4', 'e5', 'Nf3', 'Nc6']) source.move(move);
+  const original = source.pgn();
+  const preview = candidatePreview(original, ['Bb5', 'a6', 'Ba4'], 2);
+  const imported = new Chess();
+  imported.loadPgn(preview.pgn());
+  assert.deepEqual(imported.history(), ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6']);
+  assert.equal(imported.fen(), preview.fen());
+  assert.equal(source.pgn(), original);
+});
+
+test('exported preview PGN retains a custom black-to-move starting position', () => {
+  const source = new Chess('8/8/8/8/8/5kq1/8/7K b - - 0 12');
+  const preview = candidatePreview(source.pgn(), ['Qg2#'], 1);
+  const imported = new Chess();
+  imported.loadPgn(preview.pgn());
+  assert.equal(imported.getHeaders().FEN, source.fen());
+  assert.equal(imported.fen(), preview.fen());
+  assert.equal(imported.isCheckmate(), true);
+  assert.match(preview.pgn(), /12\. \.\.\. Qg2#/);
+});

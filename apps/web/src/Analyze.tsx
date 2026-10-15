@@ -71,12 +71,12 @@ export function Analyze({ pgn, onClose }: { pgn: string; onClose: () => void }) 
   }
   const lastMove = previewing ? displayGame.history({ verbose: true }).at(-1) : replay.details[ply - 1];
   const positionStatus = replayStatus(displayGame);
-  function download(format: 'pgn' | 'fen') {
-    const text = format === 'pgn' ? replay.pgn : displayGame.fen();
+  function download(format: 'pgn' | 'fen' | 'candidate') {
+    const text = format === 'candidate' ? displayGame.pgn() : format === 'pgn' ? replay.pgn : displayGame.fen();
     const url = URL.createObjectURL(new Blob([text + '\n'], { type: 'text/plain;charset=utf-8' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `chess-${format === 'fen' ? `position-${ply}${previewing ? `-candidate-${previewPly}` : ''}` : 'game'}.${format}`;
+    link.download = format === 'candidate' ? `chess-position-${ply}-candidate-${previewPly}.pgn` : `chess-${format === 'fen' ? `position-${ply}${previewing ? `-candidate-${previewPly}` : ''}` : 'game'}.${format}`;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
@@ -147,7 +147,7 @@ export function Analyze({ pgn, onClose }: { pgn: string; onClose: () => void }) 
       <button disabled={game.isGameOver() || importing} onClick={searching ? cancelSearch : findCandidate}>{searching ? 'Cancel search' : 'Find a candidate'}</button>
       <p role="status">{searching ? 'Searching this position…' : candidate.length ? candidate.join(' · ') : game.isGameOver() ? 'Game over · no continuation.' : 'Choose a position, then search for an idea.'}</p>
       {searchError && <p role="alert" className="analysis-error">{searchError}</p>}
-      {candidate.length > 0 && <div className="candidate-preview"><div className="analysis-exports" aria-label="Preview candidate moves">{candidate.map((san, i) => <button key={i} aria-pressed={previewing && previewPly === i + 1} onClick={() => { setPlaying(false); setPreviewPly(i + 1); }}>{i + 1} · {san}</button>)}</div><button disabled={!previewing} onClick={() => setPreviewPly(0)}>Return to game position</button><small role="status">{previewing ? `Previewing candidate move ${previewPly} of ${candidate.length}. Your game is unchanged.` : 'Select a candidate move to preview its position.'}</small></div>}
+      {candidate.length > 0 && <div className="candidate-preview"><div className="analysis-exports" aria-label="Preview candidate moves">{candidate.map((san, i) => <button key={i} aria-pressed={previewing && previewPly === i + 1} onClick={() => { setPlaying(false); setPreviewPly(i + 1); }}>{i + 1} · {san}</button>)}</div><button disabled={!previewing} onClick={() => setPreviewPly(0)}>Return to game position</button><button disabled={!previewing} onClick={() => download('candidate')}>Download preview PGN</button><small role="status">{previewing ? `Previewing candidate move ${previewPly} of ${candidate.length}. Your game is unchanged. Preview PGN includes the source moves and this continuation.` : 'Select a candidate move to preview its position.'}</small></div>}
       <h3>Moves</h3><div className="replay-moves">{replay.moves.length ? replay.moves.map((_, i) => <button key={i} aria-current={ply === i + 1 ? 'step' : undefined} onClick={() => navigate(i + 1)}>{replay.details[i].label}</button>) : <p>No moves in this position.</p>}</div>
       <label htmlFor="analysis-file">OPEN A PGN OR FEN FILE</label><input id="analysis-file" type="file" accept=".pgn,.fen,.txt" disabled={importing} aria-describedby="analysis-file-help" onChange={event => {
         const file = event.currentTarget.files?.[0];
