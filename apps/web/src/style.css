@@ -28,3 +28,17 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .cancel-promotion{margin-top:22px;background:transparent;border:0;color:#a7bba9;font-size:12px;padding:8px 18px}
 @media(max-width:500px){.promotion-dialog{padding:24px}.promotion-options button{font-size:36px}.actions button{flex:1;justify-content:center}}
 @media(prefers-reduced-motion:reduce){.promotion-options button{transition:none}}
+
+/* Real-time room controls */
+.online-panel{margin:-4px 0 20px;padding:18px;background:#142019;border:1px solid #4b654e;border-radius:9px}
+.online-panel label{display:block;font-size:10px;font-weight:700;letter-spacing:.15em;color:#a7c5a5;margin-bottom:9px}
+.online-panel button{background:#a7c5a5;color:#17251c;border:0;border-radius:6px;padding:10px 12px;font-weight:700;font-size:12px}
+.online-panel button:disabled{opacity:.45;cursor:not-allowed}
+.online-panel .create-room{width:100%;padding:13px}
+.online-panel .join-room{display:flex;gap:8px;margin-top:12px}
+.online-panel input{min-width:0;flex:1;background:#233329;border:1px solid #66846a;border-radius:6px;color:#e8f1e5;padding:10px;font:inherit;font-size:12px;text-transform:uppercase;letter-spacing:.09em}
+.online-panel .room-code{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#233329;border-radius:6px;padding:9px 10px}
+.online-panel .room-code strong{font-size:20px;letter-spacing:.16em}
+.online-panel .leave-room{margin-top:12px;background:transparent;color:#b7ceb8;border:1px solid #56705b}
+.online-panel .online-notice{font-size:12px;line-height:1.5;margin:12px 0 0;color:#c0d5c2}
+@media(max-width:380px){.segmented button{font-size:11px}.online-panel{padding:12px}}

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Chess, type PieceSymbol, type Square } from 'chess.js';
 import { RotateCcw, Undo2, Crown, ArrowLeftRight, Volume2, VolumeX, Flag, Handshake } from 'lucide-react';
 import { selectBotMove, type BotLevel } from '@bluebird/chess-engine';
+import { useOnlineGame } from './online';
 import './style.css';
 
 const glyphs: Record<string, string> = {
@@ -28,24 +29,31 @@ function App() {
   const [game, setGame] = useState(() => new Chess());
   const [selected, setSelected] = useState<Square | null>(null);
   const [flipped, setFlipped] = useState(false);
-  const [mode, setMode] = useState<'local' | 'bot'>('local');
+  const [mode, setMode] = useState<'local' | 'bot' | 'online'>('local');
   const [level, setLevel] = useState<BotLevel>('random');
   const [promotion, setPromotion] = useState<Promotion | null>(null);
   const [sound, setSound] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const audioRef = useRef<AudioContext | null>(null);
+  const [roomInput, setRoomInput] = useState('');
+  const online = useOnlineGame(setGame, setResult, setFlipped);
 
   const history = game.history({ verbose: true });
   const lastMove = history.at(-1);
   const botTurn = mode === 'bot' && game.turn() === 'b' && !game.isGameOver() && !result;
-  const canInteract = !botTurn && !game.isGameOver() && !result && !promotion;
+  const canInteract = !botTurn && !game.isGameOver() && !result && !promotion &&
+    (mode !== 'online' || (online.connection === 'connected' && online.seat === game.turn()));
   const legal = useMemo(() => selected ? game.moves({ square: selected, verbose: true }).map(m => m.to) : [], [game, selected]);
   const squares = Array.from({length: 64}, (_, i) => {
     const rank = flipped ? Math.floor(i / 8) + 1 : 8 - Math.floor(i / 8);
     const file = files[flipped ? 7 - i % 8 : i % 8];
     return `${file}${rank}` as Square;
   });
-  const status = result || (game.isCheckmate()
+  const status = (mode === 'online' && !online.room
+    ? 'Create or join a room to begin'
+    : mode === 'online' && online.connection !== 'connected'
+    ? 'Connecting to game server…'
+    : result) || (game.isCheckmate()
     ? `Checkmate · ${game.turn() === 'w' ? 'Black' : 'White'} wins`
     : game.isDraw() ? 'Game drawn'
     : game.isCheck() ? `Check · ${game.turn() === 'w' ? 'White' : 'Black'} to move`
@@ -89,7 +97,7 @@ function App() {
     setResult(null);
   }
   function undo() {
-    if (botTurn || !history.length) return;
+    if (mode === 'online' || botTurn || !history.length) return;
     const next = copyGame(game);
     next.undo();
     if (mode === 'bot' && next.history().length > 0) next.undo();
@@ -99,6 +107,13 @@ function App() {
     setResult(null);
   }
   function commitMove(from: Square, to: Square, piece: PieceSymbol = 'q') {
+    if (mode === 'online') {
+      if (!canInteract && !promotion) return;
+      online.send('move', { from, to, promotion: piece });
+      setSelected(null);
+      setPromotion(null);
+      return;
+    }
     const next = copyGame(game);
     try { next.move({ from, to, promotion: piece }); }
     catch { return; }
@@ -138,6 +153,11 @@ function App() {
     const cells = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('button.square');
     cells?.[next]?.focus();
   }
+  function switchMode(next: 'local' | 'bot' | 'online') {
+    if (mode === 'online' && next !== 'online') online.leave();
+    setMode(next);
+    reset();
+  }
   const checkedKing = game.isCheck()
     ? game.board().flat().find(p => p?.type === 'k' && p.color === game.turn())?.square
     : null;
@@ -153,7 +173,7 @@ function App() {
         <p className="lead">A timeless game. A beautiful place to play.</p>
         <div className="player">
           <span className="avatar dark">♚</span>
-          <div><b>{mode === 'bot' ? levels.find(x => x.id === level)?.name : 'Black pieces'}</b><small>{mode === 'bot' ? 'Computer opponent' : 'Local player'}</small></div>
+          <div><b>{mode === 'bot' ? levels.find(x => x.id === level)?.name : 'Black pieces'}</b><small>{mode === 'bot' ? 'Computer opponent' : mode === 'online' ? 'Online player' : 'Local player'}</small></div>
           <span className="player-side">BLACK</span>
         </div>
         <div className="board" role="group" aria-label="Chessboard. Select a piece, then its destination. Arrow keys move focus.">
@@ -177,31 +197,48 @@ function App() {
             </button>;
           })}
         </div>
-        <div className="player"><span className="avatar light-avatar">♔</span><div><b>White pieces</b><small>{mode === 'bot' ? 'You' : 'Local player'}</small></div><span className="player-side">WHITE</span></div>
+        <div className="player"><span className="avatar light-avatar">♔</span><div><b>White pieces</b><small>{mode === 'bot' ? 'You' : mode === 'online' ? 'Online player' : 'Local player'}</small></div><span className="player-side">WHITE</span></div>
       </section>
       <aside className="sidebar">
         <div className="panel">
           <span className="eyebrow">YOUR TABLE</span><h2>Play chess</h2><p>Choose your game, then settle in.</p>
           <div className="segmented" aria-label="Game mode">
-            <button aria-pressed={mode === 'local'} className={mode === 'local' ? 'chosen' : ''} onClick={() => { setMode('local'); reset(); }}>Two players</button>
-            <button aria-pressed={mode === 'bot'} className={mode === 'bot' ? 'chosen' : ''} onClick={() => { setMode('bot'); reset(); }}>Play a bot</button>
+            <button aria-pressed={mode === 'local'} className={mode === 'local' ? 'chosen' : ''} onClick={() => switchMode('local')}>Two players</button>
+            <button aria-pressed={mode === 'bot'} className={mode === 'bot' ? 'chosen' : ''} onClick={() => switchMode('bot')}>Play a bot</button>
+            <button aria-pressed={mode === 'online'} className={mode === 'online' ? 'chosen' : ''} onClick={() => switchMode('online')}>Online</button>
           </div>
           {mode === 'bot' && <div className="bot-select"><label htmlFor="bot">CHOOSE YOUR OPPONENT</label>
             <select id="bot" value={level} onChange={e => { setLevel(e.target.value as BotLevel); reset(); }}>{levels.map(l => <option value={l.id} key={l.id}>{l.name}</option>)}</select>
             <small>{levels.find(l => l.id === level)?.description}</small>
           </div>}
-          <div className="status" role="status" aria-live="polite"><span className="status-dot"/><span>{botTurn ? 'Computer is thinking…' : status}</span></div>
+          {mode === 'online' && <div className="online-panel">
+            {online.room ? <>
+              <label>YOUR ROOM CODE</label>
+              <div className="room-code"><strong>{online.room}</strong><button onClick={() => void navigator.clipboard?.writeText(online.room!)}>Copy</button></div>
+              <p>You play {online.seat === 'w' ? 'White' : 'Black'}. Share this code with your opponent.</p>
+              <button className="leave-room" onClick={() => { online.leave(); reset(); }}>Leave room</button>
+            </> : <>
+              <button className="create-room" disabled={online.connection === 'connecting'} onClick={() => { reset(); online.create(); }}>Create online room</button>
+              <div className="join-room">
+                <input aria-label="Room code" placeholder="8-character room code" maxLength={8} value={roomInput} onChange={e => setRoomInput(e.target.value.toUpperCase())} />
+                <button disabled={online.connection === 'connecting'} onClick={() => { reset(); online.join(roomInput); }}>Join</button>
+              </div>
+              {online.resumeAvailable && <button className="leave-room" onClick={online.resume}>Resume previous room</button>}
+            </>}
+            <p className="online-notice" role="status" aria-live="polite">{online.notice || (online.connection === 'connected' ? 'Connected to game server' : 'Room codes connect two players in real time.')}</p>
+          </div>}
+          <div className="status" role="status"  aria-live="polite"><span className="status-dot"/><span>{botTurn ? 'Computer is thinking…' : status}</span></div>
           <div className="actions">
-            <button onClick={undo} disabled={!history.length || botTurn}><Undo2 size={17}/> Undo</button>
+            <button onClick={undo} disabled={mode === 'online' || !history.length || botTurn}><Undo2 size={17}/> Undo</button>
             <button onClick={() => setFlipped(!flipped)}><ArrowLeftRight size={17}/> Flip</button>
-            <button onClick={reset}><RotateCcw size={17}/> New game</button>
+            {mode !== 'online' && <button onClick={reset}><RotateCcw size={17}/> New game</button>}
             <button aria-pressed={sound} onClick={() => setSound(!sound)}>{sound ? <Volume2 size={17}/> : <VolumeX size={17}/>} Sound {sound ? 'on' : 'off'}</button>
           </div>
           {!game.isGameOver() && !result && history.length > 0 && <div className="end-actions">
-            <button onClick={() => setResult(`${game.turn() === 'w' ? 'White' : 'Black'} resigned · ${game.turn() === 'w' ? 'Black' : 'White'} wins`)}><Flag size={15}/> Resign</button>
-            <button onClick={() => setResult('Draw by agreement')}><Handshake size={15}/> Agree draw</button>
+            <button onClick={() => mode === 'online' ? online.send('resign') : setResult(`${game.turn() === 'w' ? 'White' : 'Black'} resigned · ${game.turn() === 'w' ? 'Black' : 'White'} wins`)}><Flag size={15}/> Resign</button>
+            {mode !== 'online' && <button onClick={() => setResult('Draw by agreement')}><Handshake size={15}/> Agree draw</button>}
           </div>}
-          {(game.isGameOver() || result) && <div className="game-over"><Crown size={20}/><b>{status}</b><button onClick={reset}>Play again</button></div>}
+          {(game.isGameOver() || result) && <div className="game-over"><Crown size={20}/><b>{status}</b><button onClick={() => mode === 'online' ? online.send('rematch') : reset()}>{mode === 'online' ? 'Request rematch' : 'Play again'}</button></div>}
         </div>
         <div className="panel moves"><div className="moves-heading"><span className="eyebrow">THE STORY SO FAR</span><Crown size={17}/></div><h2>Move history</h2>
           {!history.length ? <p className="empty">Every great game begins with a first move.</p> :
