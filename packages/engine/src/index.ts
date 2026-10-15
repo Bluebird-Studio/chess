@@ -88,6 +88,8 @@ function alphaBeta(game: Chess, depth: number, alpha: number, beta: number, ply:
  * Alpha-beta is iterative and bounded; a partially searched depth is discarded.
  */
 export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits = {}): Move | null {
+  // Drawn positions may still have legal moves, but Play must stop at the result.
+  if (game.isGameOver()) return null;
   const moves = ordered(game);
   if (!moves.length) return null;
   if (level === 'random') return moves[Math.floor(Math.random() * moves.length)];
