@@ -93,6 +93,10 @@ export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits
   const moves = ordered(game);
   if (!moves.length) return null;
   if (level === 'random') return moves[Math.floor(Math.random() * moves.length)];
+  // Legal SAN already identifies mate, including promotion mates. Resolve a
+  // finished game before material scoring or a search budget can hide the win.
+  const mate = moves.find(move => move.san.endsWith('#'));
+  if (mate) return mate;
   if (level === 'greedy') return moves[0];
   if (level === 'positional') {
     const maximizing = game.turn() === 'w';
