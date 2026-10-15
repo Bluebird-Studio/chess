@@ -6,7 +6,7 @@ import { selectBotMove, type BotLevel } from '@bluebird/chess-engine';
 import { restoreOnlineGame } from './online-game';
 import { remaining, switchClock, formatClock, type ClockState } from './clock';
 import { boardFocusIndex, squareAtPoint } from './board-input';
-import { inviteLink, inviteRoom, readSavedSeat } from './invite';
+import { inviteLink, inviteRoom, parseRoomInput, readSavedSeat } from './invite';
 import { boardThemes, readPreferences, savePreferences, type BoardTheme } from './preferences';
 import './style.css';
 import { Analyze } from './Analyze';
@@ -66,6 +66,7 @@ function App() {
   }, [preferences]);
   const [result, setResult] = useState<string | null>(null);
   const [roomInput, setRoomInput] = useState(invitedRoom ?? '');
+  const requestedRoom = parseRoomInput(roomInput);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [onlineColor, setOnlineColor] = useState<'w' | 'b' | null>(null);
   const [connection, setConnection] = useState<'offline' | 'connecting' | 'connected' | 'disconnected'>('offline');
@@ -388,7 +389,7 @@ function App() {
               {savedSeat && (!invitedRoom || invitedRoom === savedSeat.roomId) && <button className="primary-action" disabled={connection === 'connecting'} onClick={() => recoverSeat(savedSeat.roomId, savedSeat.color)}>Rejoin {savedSeat.roomId} as {savedSeat.color === 'w' ? 'White' : 'Black'}</button>}
               {invitedRoom && <p className="online-notice">You’re invited to room {invitedRoom}. Join below to play as Black.</p>}
               <button className="primary-action" disabled={connection === 'connecting'} onClick={() => connectOnline('create')}>Create a room</button>
-              <label htmlFor="room-code-input">JOIN WITH A ROOM CODE</label><div className="join-room"><input id="room-code-input" value={roomInput} onChange={e => setRoomInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))} placeholder="e.g. 4F8A21BC" maxLength={8}/><button disabled={roomInput.length !== 8 || connection === 'connecting'} onClick={() => connectOnline('join', roomInput)}>Join</button></div>
+              <form onSubmit={event => { event.preventDefault(); if (requestedRoom && connection !== 'connecting') connectOnline('join', requestedRoom); }}><label htmlFor="room-code-input">ROOM CODE OR INVITE LINK</label><div className="join-room"><input id="room-code-input" value={roomInput} onChange={e => setRoomInput(e.target.value)} placeholder="Code or pasted invite link" autoComplete="off" autoCapitalize="off" spellCheck={false} aria-describedby="room-input-help" aria-invalid={!!roomInput.trim() && !requestedRoom}/><button type="submit" disabled={!requestedRoom || connection === 'connecting'}>Join</button></div><small id="room-input-help">{roomInput.trim() && !requestedRoom ? 'Enter an eight-character room code or a complete invite link.' : requestedRoom ? `Ready to join room ${requestedRoom}.` : 'Paste an invite link or enter the eight-character code.'}</small></form>
             </>}
             {connection === 'disconnected' && roomId && <button className="primary-action" onClick={() => recoverSeat(roomId, onlineColor)}>Reconnect</button>}
             {onlineNotice && <p className="online-notice" role="status">{onlineNotice}</p>}

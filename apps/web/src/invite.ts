@@ -1,3 +1,14 @@
+/** Accept a shared invite or an exact room code without truncating malformed input. */
+export function parseRoomInput(value: string): string | null {
+  const trimmed = value.trim();
+  if (/^[A-Z0-9]{8}$/i.test(trimmed)) return trimmed.toUpperCase();
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    return inviteRoom(url.toString());
+  } catch { return null; }
+}
+
 export function inviteRoom(url: string): string | null {
   const room = new URL(url).searchParams.get('room')?.toUpperCase();
   return room && /^[A-Z0-9]{8}$/.test(room) ? room : null;
