@@ -214,3 +214,32 @@ test('greedy retains a legal fallback when every move draws', () => {
   game.move(move);
   assert.ok(game.isDrawByFiftyMoves());
 });
+
+for (const [color, fen] of [
+  ['white', '6qk/1p6/8/8/8/8/8/KR6 w - - 99 51'],
+  ['black', 'kr6/8/8/8/8/8/1P6/6QK b - - 99 51']
+]) {
+  test(`greedy salvages a fifty-move draw instead of a pawn capture for ${color}`, () => {
+    const game = new Chess(fen);
+    const history = game.history();
+    const capture = game.moves({ verbose: true }).find(move => move.captured);
+    assert.ok(capture, 'fixture offers a tempting capture');
+    game.move(capture);
+    assert.equal(game.isGameOver(), false, 'capture resets the draw counter');
+    game.undo();
+    const move = selectBotMove(game, 'greedy');
+    assert.ok(move);
+    assert.equal(game.fen(), fen);
+    assert.deepEqual(game.history(), history);
+    game.move(move);
+    assert.ok(game.isDrawByFiftyMoves(), move.san);
+  });
+}
+
+test('greedy still captures material when behind without an immediate draw', () => {
+  const fen = '6qk/1p6/8/8/8/8/8/KR6 w - - 0 1';
+  const game = new Chess(fen);
+  assert.equal(selectBotMove(game, 'greedy')?.san, 'Rxb7');
+  assert.equal(game.fen(), fen);
+  assert.deepEqual(game.history(), []);
+});

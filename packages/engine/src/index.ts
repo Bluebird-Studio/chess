@@ -131,14 +131,16 @@ export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits
     // Keep capture ordering, but do not throw away a material advantage with
     // an immediate draw when a continuing move exists (including clock-rule
     // draws where a pawn move or capture resets the halfmove counter).
-    const ahead = staticScore(game) * (game.turn() === 'w' ? 1 : -1) > 0;
-    if (!ahead) return moves[0];
+    const advantage = staticScore(game) * (game.turn() === 'w' ? 1 : -1);
+    if (advantage === 0) return moves[0];
     for (const move of moves) {
       game.move(move);
       let drawn: boolean;
       try { drawn = game.isDraw(); }
       finally { game.undo(); }
-      if (!drawn) return move;
+      // When behind, salvage an immediate draw before taking material that
+      // resets the fifty-move counter or gives up a repetition opportunity.
+      if (advantage > 0 ? !drawn : drawn) return move;
     }
     return moves[0];
   }
