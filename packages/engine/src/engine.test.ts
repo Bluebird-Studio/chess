@@ -182,3 +182,35 @@ for (const level of ['minimax', 'alphabeta'] as const) {
     });
   }
 }
+
+for (const [color, fen] of [
+  ['white', '4k3/R7/8/8/8/8/7P/4K3 w - - 99 51'],
+  ['black', 'r3k3/7p/8/8/8/8/8/4K3 b - - 99 51']
+]) {
+  test(`greedy preserves its advantage instead of a fifty-move draw for ${color}`, () => {
+    const game = new Chess(fen);
+    const history = game.history();
+    const first = game.moves({ verbose: true })[0];
+    game.move(first);
+    assert.ok(game.isDrawByFiftyMoves(), 'fixture exposes an immediate draw');
+    game.undo();
+    const move = selectBotMove(game, 'greedy');
+    assert.ok(move);
+    assert.equal(move.piece, 'p', 'a pawn move keeps the winning game alive');
+    assert.equal(game.fen(), fen);
+    assert.deepEqual(game.history(), history);
+    game.move(move);
+    assert.equal(game.isGameOver(), false);
+  });
+}
+
+test('greedy retains a legal fallback when every move draws', () => {
+  const fen = '4k3/8/8/8/8/8/8/R3K3 w - - 99 51';
+  const game = new Chess(fen);
+  const move = selectBotMove(game, 'greedy');
+  assert.ok(move && game.moves().includes(move.san));
+  assert.equal(game.fen(), fen);
+  assert.deepEqual(game.history(), []);
+  game.move(move);
+  assert.ok(game.isDrawByFiftyMoves());
+});

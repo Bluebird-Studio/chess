@@ -127,7 +127,21 @@ export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits
   // finished game before material scoring or a search budget can hide the win.
   const mate = moves.find(move => move.san.endsWith('#'));
   if (mate) return mate;
-  if (level === 'greedy') return moves[0];
+  if (level === 'greedy') {
+    // Keep capture ordering, but do not throw away a material advantage with
+    // an immediate draw when a continuing move exists (including clock-rule
+    // draws where a pawn move or capture resets the halfmove counter).
+    const ahead = staticScore(game) * (game.turn() === 'w' ? 1 : -1) > 0;
+    if (!ahead) return moves[0];
+    for (const move of moves) {
+      game.move(move);
+      let drawn: boolean;
+      try { drawn = game.isDraw(); }
+      finally { game.undo(); }
+      if (!drawn) return move;
+    }
+    return moves[0];
+  }
   if (level === 'positional') {
     const maximizing = game.turn() === 'w';
     let best = moves[0], bestScore = maximizing ? -Infinity : Infinity;
