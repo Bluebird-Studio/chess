@@ -68,3 +68,9 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .lesson-board button.square{padding:0;border:0;border-radius:0;cursor:pointer;position:relative}
 .lesson-board button.square:disabled{opacity:1;cursor:default}
 .lesson-copy h3{font-size:25px;margin:16px 0}.lesson-copy p{line-height:1.7;color:#c3d1c3}.lesson-copy small{margin-top:24px;color:#a9bcae}.lesson-copy .lesson-success{border-left:3px solid #b8d4a7;padding-left:16px;color:#d7edc9}
+
+.lesson-copy progress { width: 100%; height: 6px; border: 0; border-radius: 999px; overflow: hidden; accent-color: var(--accent, #a6c596); }
+.lesson-copy progress::-webkit-progress-bar { background: #ffffff12; border-radius: 999px; }
+.lesson-copy progress::-webkit-progress-value { background: #a6c596; border-radius: 999px; }
+.lesson-copy progress::-moz-progress-bar { background: #a6c596; }
+.lesson-completed { display: block; margin-top: .5rem; font-size: .75rem; font-weight: 500; color: #a6c596; }
