@@ -119,3 +119,52 @@ test('reconnect restores the correct seat and rejects invalid tokens', { timeout
     child.kill('SIGTERM');
   }
 });
+
+test('authoritative clocks start with both players, apply increments, and adjudicate timeout', { timeout: 15000 }, async () => {
+  const port = 25000 + Math.floor(Math.random() * 2000);
+  const child = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
+    cwd: process.cwd(), env: { ...process.env, PORT: String(port), CLOCK_BASE_MS: '1800', CLOCK_INCREMENT_MS: '120' }, stdio: 'pipe'
+  });
+  const clients: WebSocket[] = [];
+  async function connect() {
+    for (let i = 0; i < 50; i++) {
+      try {
+        const ws = await new Promise<WebSocket>((resolve, reject) => {
+          const socket = new WebSocket('ws://127.0.0.1:' + port);
+          socket.once('open', () => resolve(socket));
+          socket.once('error', reject);
+        });
+        clients.push(ws);
+        return ws;
+      } catch { await delay(100); }
+    }
+    throw Error('Server did not start');
+  }
+  try {
+    const white = await connect();
+    const readWhite = inbox(white);
+    white.send(JSON.stringify({ type: 'create' }));
+    const created = await readWhite(m => m.type === 'joined');
+    const black = await connect();
+    const readBlack = inbox(black);
+    black.send(JSON.stringify({ type: 'join', roomId: created.roomId }));
+    await readBlack(m => m.type === 'joined');
+    const start = await readWhite(m => m.type === 'state');
+    assert.equal(start.activeClock, 'w');
+    assert.ok(start.clocks.w >= 1700 && start.clocks.w <= 1800);
+    assert.ok(start.clocks.b >= 1700 && start.clocks.b <= 1800);
+    assert.equal(start.increment, 120);
+
+    white.send(JSON.stringify({ type: 'move', from: 'e2', to: 'e4' }));
+    const afterMove = await readWhite(m => m.type === 'state' && m.history.length === 1);
+    assert.equal(afterMove.activeClock, 'b');
+    assert.ok(afterMove.clocks.w > 1800 && afterMove.clocks.w <= 1920);
+    assert.ok(afterMove.clocks.b >= 1750 && afterMove.clocks.b <= 1800);
+    const result = await readBlack(m => m.type === 'result' && m.reason === 'timeout');
+    assert.equal(result.winner, 'white');
+    assert.deepEqual(await readWhite(m => m.type === 'result' && m.reason === 'timeout'), result);
+  } finally {
+    for (const ws of clients) ws.terminate();
+    child.kill('SIGTERM');
+  }
+});
