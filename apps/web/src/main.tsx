@@ -7,6 +7,7 @@ import { restoreOnlineGame } from './online-game';
 import { remaining, switchClock, formatClock, type ClockState } from './clock';
 import { boardFocusIndex, squareAtPoint } from './board-input';
 import { inviteLink, inviteRoom, readSavedSeat } from './invite';
+import { boardThemes, readPreferences, savePreferences, type BoardTheme } from './preferences';
 import './style.css';
 import { Analyze } from './Analyze';
 import { Learn } from './Learn';
@@ -47,7 +48,14 @@ function App() {
   const [mode, setMode] = useState<'local' | 'bot' | 'online'>(invitedRoom || savedSeat ? 'online' : 'local');
   const [level, setLevel] = useState<BotLevel>('random');
   const [promotion, setPromotion] = useState<Promotion | null>(null);
-  const [sound, setSound] = useState(false);
+  const [preferences, setPreferences] = useState(() => {
+    try { return readPreferences(window.localStorage); }
+    catch { return { theme: 'sage' as BoardTheme, sound: false }; }
+  });
+  const { sound, theme } = preferences;
+  useEffect(() => {
+    try { savePreferences(window.localStorage, preferences); } catch { /* Storage may be disabled. */ }
+  }, [preferences]);
   const [result, setResult] = useState<string | null>(null);
   const [roomInput, setRoomInput] = useState(invitedRoom ?? '');
   const [roomId, setRoomId] = useState<string | null>(null);
@@ -317,7 +325,7 @@ function App() {
   const checkedKing = game.isCheck()
     ? game.board().flat().find(p => p?.type === 'k' && p.color === game.turn())?.square
     : null;
-  return <div className="app">
+  return <div className="app" data-board-theme={theme}>
     <header className="topbar">
       <div className="brand"><span className="brandmark">♞</span><span>BLUEBIRD <strong>CHESS</strong></span></div>
       <span className="topright">THE ART OF THE GAME <span className="dot"/></span>
@@ -384,7 +392,7 @@ function App() {
             <button onClick={undo} disabled={!history.length || botTurn || mode === 'online'}><Undo2 size={17}/> Undo</button>
             <button onClick={() => setFlipped(!flipped)}><ArrowLeftRight size={17}/> Flip</button>
             <button onClick={reset}><RotateCcw size={17}/> New game</button>
-            <button aria-pressed={sound} onClick={() => setSound(!sound)}>{sound ? <Volume2 size={17}/> : <VolumeX size={17}/>} Sound {sound ? 'on' : 'off'}</button>
+            <button aria-pressed={sound} onClick={() => setPreferences(previous => ({ ...previous, sound: !previous.sound }))}>{sound ? <Volume2 size={17}/> : <VolumeX size={17}/>} Sound {sound ? 'on' : 'off'}</button>
           </div>
           {!game.isGameOver() && !result && history.length > 0 && <div className="end-actions">
             <button onClick={() => mode === 'online' ? socketRef.current?.send(JSON.stringify({ type: 'resign' })) : setResult(`${game.turn() === 'w' ? 'White' : 'Black'} resigned · ${game.turn() === 'w' ? 'Black' : 'White'} wins`)}><Flag size={15}/> Resign</button>
@@ -394,6 +402,7 @@ function App() {
           {mode === 'online' && drawOffer && drawOffer !== onlineColor && !result && <div className="end-actions"><span>Opponent offers a draw.</span><button onClick={() => socketRef.current?.send(JSON.stringify({ type: 'accept_draw' }))}>Accept</button><button onClick={() => socketRef.current?.send(JSON.stringify({ type: 'decline_draw' }))}>Decline</button></div>}
           {(game.isGameOver() || result) && <div className="game-over"><Crown size={20}/><b>{status}</b>{mode === 'online' ? <button onClick={() => socketRef.current?.send(JSON.stringify({ type: 'rematch' }))}>Request rematch</button> : <button onClick={reset}>Play again</button>}</div>}
         </div>
+        <div className="panel board-preferences"><label htmlFor="board-theme">BOARD PALETTE</label><select id="board-theme" value={theme} onChange={event => setPreferences(previous => ({ ...previous, theme: event.target.value as BoardTheme }))}>{boardThemes.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select><small>Applies to Play, Analyze and Learn. Saved on this device.</small></div>
         <div className="panel moves"><div className="moves-heading"><span className="eyebrow">THE STORY SO FAR</span><Crown size={17}/></div><h2>Move history</h2><button className="analyze-action" disabled={!game.isGameOver() && !result && ((mode === 'online' && !!roomId) || !!clock)} onClick={() => setLearning(true)}>Learn · Mate in one</button> <button className="analyze-action" disabled={!game.isGameOver() && !result && ((mode === 'online' && !!roomId) || !!clock)} title="Review untimed games or finished games" onClick={() => setAnalysisPgn(game.pgn())}>Analyze this game</button>
           {!history.length ? <p className="empty">Every great game begins with a first move.</p> :
             <div className="move-list">{Array.from({length: Math.ceil(history.length / 2)}, (_, i) => <div className="move-row" key={i}><span>{i + 1}.</span><b>{history[2 * i]?.san}</b><b>{history[2 * i + 1]?.san || '—'}</b></div>)}</div>}
