@@ -88,6 +88,7 @@ function settleClock(room: Room): boolean {
   room.reason = room.result === 'draw' ? 'timeout_insufficient_material' : 'timeout';
   room.drawOffer = undefined;
   stopClock(room);
+  broadcast(room, state(room));
   broadcast(room, { type: 'result', winner: room.result, reason: room.reason });
   return true;
 }
@@ -217,6 +218,7 @@ wss.on('connection', ws => {
         room.reason = 'resignation';
         room.drawOffer = undefined;
         stopClock(room);
+        broadcast(room, state(room));
         broadcast(room, { type: 'result', winner: room.result, reason: room.reason });
         return;
       }
@@ -239,6 +241,7 @@ wss.on('connection', ws => {
         room.result = 'draw';
         room.reason = 'agreement';
         stopClock(room);
+        broadcast(room, state(room));
         broadcast(room, { type: 'result', winner: 'draw', reason: 'agreement' });
         return;
       }
