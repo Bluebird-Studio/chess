@@ -11,6 +11,7 @@ import { boardThemes, readPreferences, savePreferences, type BoardTheme } from '
 import './style.css';
 import { Analyze } from './Analyze';
 import { Learn } from './Learn';
+import { resolveMoveText } from './move-text';
 
 const glyphs: Record<string, string> = {
   wk:'♔', wq:'♕', wr:'♖', wb:'♗', wn:'♘', wp:'♙',
@@ -43,9 +44,13 @@ function App() {
   const clockHistory = useRef<ClockState[]>([]);
   const [now, setNow] = useState(Date.now);
   const [game, setGame] = useState(() => new Chess());
+  const [moveText, setMoveText] = useState('');
+  const [moveFeedback, setMoveFeedback] = useState('');
   const [selected, setSelected] = useState<Square | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [mode, setMode] = useState<'local' | 'bot' | 'online'>(invitedRoom || savedSeat ? 'online' : 'local');
+  useEffect(() => { setMoveText(''); }, [game]);
+  useEffect(() => { setMoveFeedback(''); }, [mode]);
   const [level, setLevel] = useState<BotLevel>('random');
   const [promotion, setPromotion] = useState<Promotion | null>(null);
   const [preferences, setPreferences] = useState(() => {
@@ -388,6 +393,20 @@ function App() {
           </div>}
           {mode !== 'online' && <div className="bot-select"><label htmlFor="time-control">TIME PER PLAYER</label><select id="time-control" value={timeControl} onChange={e => { reset(); setTimeControl(Number(e.target.value)); }}><option value={0}>Untimed · take your time</option><option value={300000}>5 minutes · blitz</option><option value={600000}>10 minutes · rapid</option></select><small>{clock ? 'Clock running. Each move starts your opponent’s time.' : 'The clock starts after White’s first move.'}</small></div>}
           <div className="status" role="status" aria-live="polite"><span className="status-dot"/><span>{botTurn ? 'Computer is thinking…' : status}</span></div>
+          <form className="move-entry" onSubmit={event => {
+            event.preventDefault();
+            if (!canInteract) return;
+            try {
+              const move = resolveMoveText(game, moveText);
+              commitMove(move.from, move.to, move.promotion);
+              setMoveText(''); setMoveFeedback(`${move.san} submitted.`);
+            } catch (cause) { setMoveFeedback((cause as Error).message); }
+          }}>
+            <label htmlFor="move-entry">TYPE A MOVE</label>
+            <div><input id="move-entry" value={moveText} disabled={!canInteract} onChange={event => { setMoveText(event.target.value); setMoveFeedback(''); }} autoComplete="off" autoCapitalize="off" spellCheck={false} placeholder="Nf3 or e2e4" maxLength={20} aria-describedby="move-entry-help move-entry-feedback"/><button disabled={!canInteract || !moveText.trim()} type="submit">Play move</button></div>
+            <small id="move-entry-help">Algebraic or coordinates · O-O castles · e7e8n promotes to a knight.</small>
+            <small id="move-entry-feedback" role="status">{moveFeedback}</small>
+          </form>
           <div className="actions">
             <button onClick={undo} disabled={!history.length || botTurn || mode === 'online'}><Undo2 size={17}/> Undo</button>
             <button onClick={() => setFlipped(!flipped)}><ArrowLeftRight size={17}/> Flip</button>

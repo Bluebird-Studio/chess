@@ -102,3 +102,13 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .replay-playback { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; margin: .75rem 0; }
 .replay-playback label { font-size: .8rem; color: #a5b7a9; }
 .replay-playback select { max-width: 100%; }
+
+.move-entry{margin:18px 0;display:grid;gap:8px}
+.move-entry label{font-size:10px;letter-spacing:.15em;font-weight:700;color:#b8cbb9}
+.move-entry>div{display:flex;gap:8px}
+.move-entry input{min-width:0;flex:1;background:#152019;color:#edf4eb;border:1px solid #637c68;border-radius:6px;padding:10px 12px;font:inherit}
+.move-entry button{flex-shrink:0}
+.move-entry small{color:#a4b7a8;font-size:11px;line-height:1.6}
+.move-entry input:focus-visible{outline:2px solid #c89859;outline-offset:2px}
+.move-entry input:disabled{opacity:.5}
+.move-entry small:empty{display:none}
