@@ -11,3 +11,14 @@ export function readReplay(source: string): { positions: string[]; moves: string
   const moves = game.history({ verbose: true });
   return { positions: [moves[0]?.before ?? game.fen(), ...moves.map(move => move.after)], moves: moves.map(move => move.san), pgn: game.pgn() };
 }
+
+/** Resolve replay keys without allowing navigation outside the imported game. */
+export function replayShortcut(key: string, ply: number, length: number): number | null {
+  switch (key) {
+    case 'ArrowLeft': return Math.max(0, ply - 1);
+    case 'ArrowRight': return Math.min(length, ply + 1);
+    case 'Home': return 0;
+    case 'End': return length;
+    default: return null;
+  }
+}

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Chess } from 'chess.js';
-import { readReplay } from './replay';
+import { readReplay, replayShortcut } from './replay';
 
 test('replay includes initial position and every ply without changing the source game', () => {
   const game = new Chess();
@@ -23,4 +23,15 @@ test('FEN and PGN with a custom starting position retain that position', () => {
 });
 test('invalid imports are rejected', () => {
   for (const input of ['', 'not a game', '8/8/8/8/8/8/8/8 w - - 0 1']) assert.throws(() => readReplay(input));
+});
+
+test('replay keyboard navigation stays within game boundaries including FEN-only imports', () => {
+  assert.equal(replayShortcut('ArrowLeft', 0, 4), 0);
+  assert.equal(replayShortcut('ArrowRight', 4, 4), 4);
+  assert.equal(replayShortcut('ArrowLeft', 3, 4), 2);
+  assert.equal(replayShortcut('ArrowRight', 1, 4), 2);
+  assert.equal(replayShortcut('Home', 3, 4), 0);
+  assert.equal(replayShortcut('End', 1, 4), 4);
+  assert.equal(replayShortcut('ArrowRight', 0, 0), 0);
+  assert.equal(replayShortcut('Escape', 2, 4), null);
 });
