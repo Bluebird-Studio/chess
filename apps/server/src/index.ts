@@ -187,6 +187,7 @@ wss.on('connection', ws => {
         roomId = id;
         send(ws, { type: 'joined', roomId: id, color, token: msg.token, fen: room.game.fen(), reconnected: true });
         send(ws, state(room));
+        for (const seat of room.rematch) send(ws, { type: 'rematch_requested', color: seat });
         // Notify only the other seat: reconnecting is not evidence that the
         // opponent is present (both players may have lost their connection).
         for (const [peer, seat] of room.players) {
@@ -320,7 +321,7 @@ wss.on('connection', ws => {
     if (!room || !room.players.has(ws)) return;
     room.players.delete(ws);
     // Clocks keep running while a player reconnects; the active side remains charged.
-    room.rematch.clear();
+    // Rematch consent belongs to the reserved seat and survives reconnects.
     // A connection loss is not a draw rejection. Keep the offer in authoritative
     // state so either seat can recover it and the opponent can still accept.
     broadcast(room, { type: 'opponent_disconnected' });

@@ -249,6 +249,35 @@ test('reconnect restores the correct seat and rejects invalid tokens', { timeout
     assert.equal(finished.result, 'draw');
     assert.equal(finished.reason, 'agreement');
     assert.equal(finished.drawOffer, undefined);
+
+    // A request from either reserved seat survives a transport loss. Rejoining
+    // restores the pending request, but cannot itself start the next game.
+    returned.send(JSON.stringify({ type: 'rematch' }));
+    assert.equal((await readWhite(m => m.type === 'rematch_requested')).color, 'b');
+    returned.close();
+    await readWhite(m => m.type === 'opponent_disconnected');
+    const rematchSeat = await connect();
+    const readRematch = inbox(rematchSeat);
+    rematchSeat.send(JSON.stringify({ type: 'reconnect', roomId: created.roomId, token: joined.token }));
+    await readRematch(m => m.type === 'joined');
+    const pending = await readRematch(m => m.type === 'state');
+    assert.equal(pending.gameOver, true, 'reconnect does not supply opponent consent');
+    assert.equal(pending.activeClock, undefined);
+    assert.equal((await readRematch(m => m.type === 'rematch_requested')).color, 'b');
+    white.send(JSON.stringify({ type: 'rematch' }));
+    const restarted = await readRematch(m => m.type === 'state' && m.rematch === true);
+    assert.equal(restarted.gameOver, false);
+    assert.deepEqual(restarted.history, []);
+    assert.equal(restarted.activeClock, 'w');
+    await readWhite(m => m.type === 'state' && m.rematch === true);
+
+    // Starting a new game consumes both old requests.
+    white.send(JSON.stringify({ type: 'resign' }));
+    await readRematch(m => m.type === 'result');
+    white.send(JSON.stringify({ type: 'rematch' }));
+    await readRematch(m => m.type === 'rematch_requested' && m.color === 'w');
+    rematchSeat.send(JSON.stringify({ type: 'move', from: 'e7', to: 'e5' }));
+    assert.equal((await readRematch(m => m.type === 'error')).message, 'Game is over');
   } finally {
     for (const ws of clients) ws.terminate();
     child.kill('SIGTERM');
