@@ -26,3 +26,11 @@ export function puzzleSolution(puzzle: typeof puzzles[number]): { fen: string; s
   if (!game.isCheckmate()) throw new Error('Exercise solution must be checkmate.');
   return { fen: game.fen(), san: move.san, from: move.from, to: move.to };
 }
+
+/** Guide without moving the board or disclosing the destination. */
+export function puzzlePieceHint(puzzle: typeof puzzles[number]): { square: Square; message: string } {
+  const square = puzzleSolution(puzzle).from;
+  const piece = new Chess(puzzle.fen).get(square)!;
+  const name = { k: 'king', q: 'queen', r: 'rook', b: 'bishop', n: 'knight', p: 'pawn' }[piece.type];
+  return { square, message: `Look at the ${piece.color === 'w' ? 'white' : 'black'} ${name} on ${square}.` };
+}

@@ -1,6 +1,6 @@
 import { useRef, useState, type PointerEvent } from 'react';
 import { Chess, type Square } from 'chess.js';
-import { puzzles, puzzleSolution, tryPuzzleMove, type PuzzlePromotion } from './puzzles';
+import { puzzles, puzzleSolution, puzzlePieceHint, tryPuzzleMove, type PuzzlePromotion } from './puzzles';
 import { nextExerciseIndex, readCompleted, saveCompleted } from './learn-progress';
 import { squareAtPoint, boardFocusIndex } from './board-input';
 import { resolveMoveText } from './move-text';
@@ -37,6 +37,7 @@ export function Learn({ onClose }: { onClose: () => void }) {
   const [solved, setSolved] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const [hint, setHint] = useState(false);
+  const [pieceHint, setPieceHint] = useState(false);
   const [moveText, setMoveText] = useState('');
   const [moveError, setMoveError] = useState('');
   const [focusIndex, setFocusIndex] = useState(0);
@@ -44,6 +45,7 @@ export function Learn({ onClose }: { onClose: () => void }) {
   const game = new Chess(fen);
   const solvingColor = new Chess(puzzle.fen).turn();
   const sideName = solvingColor === 'w' ? 'White' : 'Black';
+  const guidance = pieceHint && !solved && !revealed ? puzzlePieceHint(puzzle) : null;
   const legal = selected ? game.moves({ square: selected, verbose: true }).map(move => move.to) : [];
   function touchEnd(event: PointerEvent<HTMLButtonElement>, cancelled = false) {
     const touch = touchRef.current;
@@ -88,7 +90,7 @@ export function Learn({ onClose }: { onClose: () => void }) {
     }
   }
   function openExercise(nextIndex: number) {
-    setPendingPromotion(null); setMoveText(''); setMoveError(''); setLastMove(null); setIndex(nextIndex); setFen(puzzles[nextIndex].fen); setSelected(null); setSolved(false); setRevealed(false); setHint(false);
+    setPendingPromotion(null); setMoveText(''); setMoveError(''); setLastMove(null); setIndex(nextIndex); setFen(puzzles[nextIndex].fen); setSelected(null); setSolved(false); setRevealed(false); setHint(false); setPieceHint(false);
     setMessage('Select a piece, then its destination.');
   }
   return <section className="analysis-workspace panel" aria-label="Learn chess">
@@ -126,7 +128,7 @@ export function Learn({ onClose }: { onClose: () => void }) {
           if (next === null) return;
           event.preventDefault();
           event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('button.square')[next]?.focus();
-        }} onClick={event => { if (event.detail === 0 || Date.now() >= suppressClickUntil.current) select(square); }} aria-label={`${square}${piece ? ` ${piece.color === 'w' ? 'White' : 'Black'} ${({ k:'king', q:'queen', r:'rook', b:'bishop', n:'knight', p:'pawn' })[piece.type]}` : ''}`} aria-pressed={selected === square} aria-disabled={solved || revealed || !!pendingPromotion} aria-description={legal.includes(square) ? 'Legal destination' : undefined} className={`square ${(file + rank) % 2 === 0 ? 'light' : 'dark'} ${lastMove && (lastMove.from === square || lastMove.to === square) ? 'last-move' : ''} ${game.isCheck() && piece?.type === 'k' && piece.color === game.turn() ? 'in-check' : ''} ${selected === square ? 'active' : ''} ${legal.includes(square) ? 'target' : ''}`}><span className={`piece ${piece?.color === 'w' ? 'white-piece' : 'black-piece'}`}>{piece ? glyphs[piece.color + piece.type] : ''}</span>{i % 8 === 0 && <span className="rank">{rank}</span>}{i >= 56 && <span className="file">{square[0]}</span>}</button>;
+        }} onClick={event => { if (event.detail === 0 || Date.now() >= suppressClickUntil.current) select(square); }} aria-label={`${square}${piece ? ` ${piece.color === 'w' ? 'White' : 'Black'} ${({ k:'king', q:'queen', r:'rook', b:'bishop', n:'knight', p:'pawn' })[piece.type]}` : ''}`} aria-pressed={selected === square} aria-disabled={solved || revealed || !!pendingPromotion} aria-description={[guidance?.square === square ? 'Hint: move this piece' : '', legal.includes(square) ? 'Legal destination' : ''].filter(Boolean).join('. ') || undefined} className={`square ${guidance?.square === square ? 'hint-piece' : ''} ${(file + rank) % 2 === 0 ? 'light' : 'dark'} ${lastMove && (lastMove.from === square || lastMove.to === square) ? 'last-move' : ''} ${game.isCheck() && piece?.type === 'k' && piece.color === game.turn() ? 'in-check' : ''} ${selected === square ? 'active' : ''} ${legal.includes(square) ? 'target' : ''}`}><span className={`piece ${piece?.color === 'w' ? 'white-piece' : 'black-piece'}`}>{piece ? glyphs[piece.color + piece.type] : ''}</span>{i % 8 === 0 && <span className="rank">{rank}</span>}{i >= 56 && <span className="file">{square[0]}</span>}</button>;
       })}
     </div><div className="analysis-tools lesson-copy"><span className="eyebrow">EXERCISE {index + 1} OF {puzzles.length}</span><p aria-label="Exercise progress">{completed.length} of {puzzles.length} exercises completed{completed.length === puzzles.length ? ' · All complete' : ''}</p><progress value={completed.length} max={puzzles.length} aria-label="Completed exercises" /><p className="lesson-streak" role="status">Streak <strong>{streak.current}</strong> · Best <strong>{streak.best}</strong></p><small>Solve different exercises in a row. An incorrect legal move or revealed solution resets your streak; hints are welcome. Best is saved on this device.</small><label htmlFor="learn-exercise">CHOOSE AN EXERCISE</label><select id="learn-exercise" value={index} onChange={event => openExercise(Number(event.target.value))}>{puzzles.map((item, i) => <option key={item.id} value={i}>{i + 1}. {item.title}{completed.includes(item.id) ? ' · Completed' : ''}</option>)}</select><h3>{puzzle.title}{completed.includes(puzzle.id) && <span className="lesson-completed"> ✓ Completed</span>}</h3><p>{sideName} to move · Checkmate in one</p><p role="status" className={solved || revealed ? 'lesson-success' : ''}>{message}</p>{pendingPromotion && <fieldset className="lesson-promotion"><legend>Promote your pawn</legend><div className="promotion-options">{(['q', 'r', 'b', 'n'] as const).map((piece, i) => <button key={piece} autoFocus={i === 0} aria-label={`Promote to ${{ q: 'queen', r: 'rook', b: 'bishop', n: 'knight' }[piece]}`} onClick={() => attemptMove(pendingPromotion.from, pendingPromotion.to, piece)}>{glyphs[solvingColor + piece]}</button>)}</div><button onClick={() => { setPendingPromotion(null); setMessage('Select a piece, then its destination.'); }}>Cancel promotion</button></fieldset>}<form className="lesson-move-input" onSubmit={event => {
         event.preventDefault();
@@ -135,7 +137,7 @@ export function Learn({ onClose }: { onClose: () => void }) {
           const move = resolveMoveText(game, moveText);
           attemptMove(move.from, move.to, move.promotion as PuzzlePromotion | undefined);
         } catch (cause) { setMoveError((cause as Error).message); }
-      }}><label htmlFor="lesson-move">OR TYPE YOUR MOVE</label><input id="lesson-move" value={moveText} disabled={solved || revealed || !!pendingPromotion} onChange={event => { setMoveText(event.target.value); setMoveError(''); }} placeholder="Qg7 or g6g7" autoComplete="off" autoCapitalize="off" spellCheck={false} aria-invalid={!!moveError} aria-describedby={moveError ? 'lesson-move-error' : 'lesson-move-help'} /><button disabled={solved || revealed || !!pendingPromotion || !moveText.trim()} type="submit">Try move</button><small id="lesson-move-help">Use chess notation or starting and destination squares. For promotion, include the piece: g7g8r or g8=R.</small>{moveError && <p id="lesson-move-error" role="alert" className="analysis-error">{moveError}</p>}</form>{!solved && !revealed && !pendingPromotion && <button onClick={() => setHint(true)}>Show a hint</button>}{hint && !solved && !revealed && !pendingPromotion && <><p>{puzzle.hint}</p><button onClick={() => {
+      }}><label htmlFor="lesson-move">OR TYPE YOUR MOVE</label><input id="lesson-move" value={moveText} disabled={solved || revealed || !!pendingPromotion} onChange={event => { setMoveText(event.target.value); setMoveError(''); }} placeholder="Qg7 or g6g7" autoComplete="off" autoCapitalize="off" spellCheck={false} aria-invalid={!!moveError} aria-describedby={moveError ? 'lesson-move-error' : 'lesson-move-help'} /><button disabled={solved || revealed || !!pendingPromotion || !moveText.trim()} type="submit">Try move</button><small id="lesson-move-help">Use chess notation or starting and destination squares. For promotion, include the piece: g7g8r or g8=R.</small>{moveError && <p id="lesson-move-error" role="alert" className="analysis-error">{moveError}</p>}</form>{!solved && !revealed && !pendingPromotion && <button onClick={() => setHint(true)}>Show a hint</button>}{hint && !solved && !revealed && !pendingPromotion && <><p>{puzzle.hint}</p>{!pieceHint ? <button onClick={() => setPieceHint(true)}>Show which piece</button> : <p role="status">{guidance?.message} The outlined square marks your piece; find its mating destination.</p>}<button onClick={() => {
         recordAttempt(false);
         const solution = puzzleSolution(puzzle);
         setFen(solution.fen); setLastMove(solution); setSelected(null); setRevealed(true);
