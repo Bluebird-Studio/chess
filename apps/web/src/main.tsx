@@ -11,6 +11,8 @@ import { boardThemes, readPreferences, savePreferences, type BoardTheme } from '
 import './style.css';
 import { Analyze } from './Analyze';
 import { Learn } from './Learn';
+import { ResignDialog } from './ResignDialog';
+import { resigningColor } from './resignation';
 import { resolveMoveText } from './move-text';
 
 const glyphs: Record<string, string> = {
@@ -52,6 +54,7 @@ function App() {
   useEffect(() => { setMoveText(''); }, [game]);
   useEffect(() => { setMoveFeedback(''); }, [mode]);
   const [level, setLevel] = useState<BotLevel>('random');
+  const [confirmResign, setConfirmResign] = useState(false);
   const [promotion, setPromotion] = useState<Promotion | null>(null);
   const [preferences, setPreferences] = useState(() => {
     try { return readPreferences(window.localStorage); }
@@ -95,6 +98,9 @@ function App() {
   const timedOut = mode !== 'online' && clockValues && clockValues[game.turn()] === 0;
   const botTurn = mode === 'bot' && game.turn() === 'b' && !game.isGameOver() && !result && !timedOut;
   const canInteract = !timedOut && !botTurn && !game.isGameOver() && !result && !promotion && (mode !== 'online' || (connection === 'connected' && onlineColor === game.turn()));
+  const resignColor = resigningColor(mode, game.turn(), onlineColor);
+  const canResign = !timedOut && !result && !game.isGameOver() && !!resignColor && (mode !== 'online' || connection === 'connected');
+  useEffect(() => { setConfirmResign(false); }, [game, mode, result, connection]);
   const legal = useMemo(() => selected ? game.moves({ square: selected, verbose: true }).map(m => m.to) : [], [game, selected]);
   const squares = Array.from({length: 64}, (_, i) => {
     const rank = flipped ? Math.floor(i / 8) + 1 : 8 - Math.floor(i / 8);
@@ -414,7 +420,7 @@ function App() {
             <button aria-pressed={sound} onClick={() => setPreferences(previous => ({ ...previous, sound: !previous.sound }))}>{sound ? <Volume2 size={17}/> : <VolumeX size={17}/>} Sound {sound ? 'on' : 'off'}</button>
           </div>
           {!game.isGameOver() && !result && history.length > 0 && <div className="end-actions">
-            <button onClick={() => mode === 'online' ? socketRef.current?.send(JSON.stringify({ type: 'resign' })) : setResult(`${game.turn() === 'w' ? 'White' : 'Black'} resigned · ${game.turn() === 'w' ? 'Black' : 'White'} wins`)}><Flag size={15}/> Resign</button>
+            <button disabled={!canResign} onClick={() => setConfirmResign(true)}><Flag size={15}/> Resign</button>
             {mode === 'online' && <button disabled={connection !== 'connected' || !!drawOffer} onClick={() => socketRef.current?.send(JSON.stringify({ type: 'offer_draw' }))}><Handshake size={15}/>{drawOffer === onlineColor ? 'Draw offered' : 'Offer draw'}</button>}
             {mode !== 'online' && <button onClick={() => setResult('Draw by agreement')}><Handshake size={15}/> Agree draw</button>}
           </div>}
@@ -430,6 +436,12 @@ function App() {
       </aside>
     </main>
     {touchDrag && <span aria-hidden="true" className={`touch-piece piece ${game.get(touchDrag.from)?.color === 'w' ? 'white-piece' : 'black-piece'}`} style={{ left: touchDrag.x, top: touchDrag.y }}>{glyphs[(game.get(touchDrag.from)?.color ?? '') + (game.get(touchDrag.from)?.type ?? '')]}</span>}
+    {confirmResign && canResign && resignColor && <ResignDialog color={resignColor} onCancel={() => setConfirmResign(false)} onConfirm={() => {
+      setConfirmResign(false);
+      if (!canResign) return;
+      if (mode === 'online') socketRef.current?.send(JSON.stringify({ type: 'resign' }));
+      else setResult(`${resignColor === 'w' ? 'White' : 'Black'} resigned · ${resignColor === 'w' ? 'Black' : 'White'} wins`);
+    }} />}
     {promotion && <div className="modal-backdrop" onClick={() => setPromotion(null)}>
       <div ref={promotionRef} className="promotion-dialog" onKeyDown={event => {
         if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setPromotion(null); }

@@ -121,3 +121,11 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .lesson-move-input { display: grid; gap: 10px; padding: 16px; border: 1px solid #ffffff20; border-radius: 12px; }
 .lesson-move-input input { width: 100%; min-width: 0; box-sizing: border-box; padding: 12px; border: 1px solid #ffffff20; border-radius: 8px; background: #111b16; color: inherit; font: inherit; }
 .lesson-move-input input[aria-invalid="true"] { border-color: #df8d79; }
+
+.resign-dialog{color:var(--text,#e5ece7);padding:0;max-width:calc(100vw - 40px)}
+.resign-dialog::backdrop{background:#060d09c9;backdrop-filter:blur(5px)}
+.resign-dialog-content{padding:32px}
+.resign-dialog-actions{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+.resign-dialog-actions button{padding:12px 18px;border:1px solid #718a7470;border-radius:8px;background:#31483a;color:#eef4ef;font:inherit;cursor:pointer}
+.resign-dialog-actions .confirm-resign{background:#643c35;border-color:#c18471;color:#fff1ec}
+.resign-dialog-actions button:focus-visible{outline:3px solid #b9d59f;outline-offset:3px}
