@@ -244,7 +244,9 @@ wss.on('connection', ws => {
             room.game.isThreefoldRepetition() ? 'threefold_repetition' : 'fifty_move_rule';
           stopClock(room);
         }
-        room.drawOffer = undefined;
+        // An offer made before moving remains available during the opponent's turn.
+        // The opponent declines implicitly by making a legal move.
+        if (room.result || room.drawOffer !== color) room.drawOffer = undefined;
         broadcast(room, state(room));
       }
     } catch {

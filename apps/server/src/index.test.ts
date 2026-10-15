@@ -52,6 +52,18 @@ test('server synchronizes legal moves and enforces turn ownership', {timeout:150
   assert.equal((await blackInbox(m=>m.type==='state'&&m.rematch===true)).gameOver,false);
   white.send(JSON.stringify({type:'offer_draw'}));
   assert.deepEqual(await blackInbox(m=>m.type==='draw_offered'),{type:'draw_offered',color:'w'});
+  white.send(JSON.stringify({type:'move',from:'e2',to:'e4'}));
+  const offered=await blackInbox(m=>m.type==='state'&&m.history.length===1);
+  assert.equal(offered.drawOffer,'w','offering player may move without withdrawing the offer');
+  black.send(JSON.stringify({type:'move',from:'e7',to:'e4'}));
+  assert.equal((await blackInbox(m=>m.type==='error')).message,'Illegal move');
+  black.send(JSON.stringify({type:'move',from:'e7',to:'e5'}));
+  const declined=await whiteInbox(m=>m.type==='state'&&m.history.length===2);
+  assert.equal(declined.drawOffer,undefined,'opponent legal move declines the offer');
+  black.send(JSON.stringify({type:'accept_draw'}));
+  assert.equal((await blackInbox(m=>m.type==='error')).message,'No opponent draw offer to accept');
+  white.send(JSON.stringify({type:'offer_draw'}));
+  await blackInbox(m=>m.type==='draw_offered');
   white.send(JSON.stringify({type:'accept_draw'}));
   assert.equal((await whiteInbox(m=>m.type==='error')).message,'No opponent draw offer to accept');
   black.send(JSON.stringify({type:'accept_draw'}));
