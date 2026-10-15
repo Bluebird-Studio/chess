@@ -34,3 +34,33 @@ test('greedy bot prefers capturing a queen over a pawn', () => {
   const move = selectBotMove(game, 'greedy');
   assert.equal(move?.san, 'Rxa2');
 });
+
+for (const [reason, fen] of [
+  ['insufficient material', '4k3/8/8/8/8/8/8/4K3 w - - 0 1'],
+  ['fifty-move rule', '4k3/8/8/8/8/8/8/R3K3 w - - 100 51'],
+  ['stalemate', '7k/5Q2/6K1/8/8/8/8/8 b - - 0 1']
+]) {
+  test(`all bots stop after ${reason}`, () => {
+    const game = new Chess(fen);
+    assert.ok(game.isDraw());
+    for (const level of levels) {
+      assert.equal(selectBotMove(game, level), null, level);
+      assert.equal(game.fen(), fen);
+      assert.deepEqual(game.history(), []);
+    }
+  });
+}
+
+test('all bots preserve a repetition draw and its move history', () => {
+  const game = new Chess();
+  for (const san of ['Nf3', 'Nf6', 'Ng1', 'Ng8', 'Nf3', 'Nf6', 'Ng1', 'Ng8']) game.move(san);
+  assert.ok(game.isThreefoldRepetition());
+  assert.ok(game.moves().length > 0);
+  const fen = game.fen(), history = game.history();
+  for (const level of levels) {
+    assert.equal(selectBotMove(game, level), null, level);
+    assert.equal(game.fen(), fen);
+    assert.deepEqual(game.history(), history);
+    assert.ok(game.isThreefoldRepetition());
+  }
+});
