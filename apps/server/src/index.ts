@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { Chess, type Square } from 'chess.js';
 import { randomUUID } from 'node:crypto';
+import { performance } from 'node:perf_hooks';
 import { timeoutResult } from './timeout.js';
 
 type Color = 'w' | 'b';
@@ -13,6 +14,7 @@ type Room = {
   drawOffer?: Color;
   remaining: Record<Color, number>;
   increment: number;
+  // Monotonic milliseconds: wall-clock corrections must never change a game.
   turnStartedAt?: number;
   clockInterval?: ReturnType<typeof setInterval>;
   rematch: Set<Color>;
@@ -56,7 +58,7 @@ function state(room: Room) {
   const remaining = { ...room.remaining };
   if (room.turnStartedAt !== undefined && !room.result && !room.game.isGameOver()) {
     const active = room.game.turn();
-    remaining[active] = Math.max(0, remaining[active] - (Date.now() - room.turnStartedAt));
+    remaining[active] = Math.max(0, remaining[active] - (performance.now() - room.turnStartedAt));
   }
   return {
     type: 'state', fen: room.game.fen(), history: room.game.history(),
@@ -77,10 +79,10 @@ function stopClock(room: Room) {
 function settleClock(room: Room): boolean {
   if (room.turnStartedAt === undefined || room.result || room.game.isGameOver()) return false;
   const active = room.game.turn();
-  const elapsed = Date.now() - room.turnStartedAt;
+  const elapsed = performance.now() - room.turnStartedAt;
   if (elapsed < room.remaining[active]) {
     room.remaining[active] -= elapsed;
-    room.turnStartedAt = Date.now();
+    room.turnStartedAt = performance.now();
     return false;
   }
   room.remaining[active] = 0;
@@ -95,7 +97,7 @@ function settleClock(room: Room): boolean {
 function startClock(room: Room) {
   if (!room.tokens.w || !room.tokens.b) return;
   if (room.turnStartedAt !== undefined || room.result || room.game.isGameOver()) return;
-  room.turnStartedAt = Date.now();
+  room.turnStartedAt = performance.now();
   room.clockInterval = setInterval(() => {
     if (settleClock(room)) return;
     broadcast(room, state(room));
@@ -295,7 +297,7 @@ wss.on('connection', ws => {
         try { room.game.move({ from, to, promotion: msg.promotion ?? 'q' }); }
         catch { send(ws, { type: 'error', message: 'Illegal move' }); return; }
         room.remaining[color] += room.increment;
-        room.turnStartedAt = room.game.isGameOver() ? undefined : Date.now();
+        room.turnStartedAt = room.game.isGameOver() ? undefined : performance.now();
         if (room.game.isGameOver()) {
           room.result = room.game.isCheckmate() ? (room.game.turn() === 'w' ? 'black' : 'white') : 'draw';
           room.reason = room.game.isCheckmate() ? 'checkmate' :
