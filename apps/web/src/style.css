@@ -39,3 +39,29 @@ button:focus-visible,select:focus-visible{outline:2px solid #c5d7a6;outline-offs
 .square[draggable="true"]{touch-action:none;user-select:none;-webkit-user-select:none}
 .square.touch-origin .piece{opacity:.25}
 .touch-piece{position:fixed;transform:translate(-50%,-65%);pointer-events:none;z-index:40;filter:drop-shadow(0 8px 6px #0006);font-size:clamp(34px,8vw,64px)}
+
+/* Independent review workspace keeps live game state intact. */
+.layout[hidden] { display: none; }
+.analysis-workspace { max-width: 1120px; margin: 32px auto; }
+.analysis-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.analysis-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(240px, 1fr); gap: 32px; margin-top: 24px; }
+.analysis-workspace button, .analyze-action { border: 1px solid #d6d6cd; border-radius: 7px; background: #f6f5ef; color: #273e34; padding: 9px 12px; cursor: pointer; font: inherit; }
+.analysis-workspace button:disabled { opacity: .4; cursor: default; }
+.analysis-board .square { cursor: default; }
+.replay-controls { display: flex; gap: 6px; align-items: center; margin: 16px 0; }
+.replay-controls span { flex: 1; text-align: center; font-size: 13px; }
+.analysis-tools { min-width: 0; }
+.analysis-tools label { display: block; margin: 24px 0 8px; font-size: 11px; letter-spacing: 1px; font-weight: 700; }
+.analysis-tools textarea { display: block; width: 100%; min-height: 84px; resize: vertical; padding: 12px; border: 1px solid #d6d6cd; border-radius: 7px; background: #fafaf6; color: #273e34; font: 12px/1.6 monospace; margin-bottom: 10px; }
+.analysis-tools small { display: block; line-height: 1.6; color: #657067; }
+.replay-moves { display: flex; flex-wrap: wrap; gap: 5px; max-height: 180px; overflow: auto; }
+.replay-moves button[aria-current] { background: #254b3e; color: #fff; }
+.analysis-error { color: #9b302b; }
+.analyze-action { margin-bottom: 14px; }
+@media (max-width: 700px) { .analysis-workspace { margin: 16px; } .analysis-layout { grid-template-columns: 1fr; gap: 16px; } .replay-controls button { padding: 9px; } }
+.analysis-board { container-type: inline-size; }
+.analysis-board .piece { font-size: 10cqw; }
+.analysis-board .square:hover .piece { transform: none; }
+.analysis-workspace button:focus-visible, .analysis-workspace textarea:focus-visible, .analyze-action:focus-visible { outline: 3px solid #f5da83; outline-offset: 3px; }
+.analyze-action:disabled { opacity: .45; cursor: default; }
+.analysis-tools .analysis-error { color: #ffc0b8; }

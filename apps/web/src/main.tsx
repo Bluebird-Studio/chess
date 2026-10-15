@@ -8,6 +8,7 @@ import { remaining, switchClock, formatClock, type ClockState } from './clock';
 import { boardFocusIndex, squareAtPoint } from './board-input';
 import { inviteLink, inviteRoom, readSavedSeat } from './invite';
 import './style.css';
+import { Analyze } from './Analyze';
 
 const glyphs: Record<string, string> = {
   wk:'♔', wq:'♕', wr:'♖', wb:'♗', wn:'♘', wp:'♙',
@@ -29,6 +30,7 @@ function copyGame(game: Chess): Chess {
   return next;
 }
 function App() {
+  const [analysisPgn, setAnalysisPgn] = useState<string | null>(null);
   const [invitedRoom] = useState(() => inviteRoom(window.location.href));
   const [savedSeat, setSavedSeat] = useState(() => {
     try { return readSavedSeat(sessionStorage.getItem('bluebird:last-seat')); } catch { return null; }
@@ -318,7 +320,8 @@ function App() {
       <div className="brand"><span className="brandmark">♞</span><span>BLUEBIRD <strong>CHESS</strong></span></div>
       <span className="topright">THE ART OF THE GAME <span className="dot"/></span>
     </header>
-    <main className="layout">
+    {analysisPgn !== null && <Analyze pgn={analysisPgn} onClose={() => setAnalysisPgn(null)}/>}
+    <main className="layout" hidden={analysisPgn !== null}>
       <section className="board-column">
         <div className="eyebrow">THE CLASSIC GAME, REIMAGINED</div>
         <h1>Make your <em>move.</em></h1>
@@ -388,7 +391,7 @@ function App() {
           {mode === 'online' && drawOffer && drawOffer !== onlineColor && !result && <div className="end-actions"><span>Opponent offers a draw.</span><button onClick={() => socketRef.current?.send(JSON.stringify({ type: 'accept_draw' }))}>Accept</button><button onClick={() => socketRef.current?.send(JSON.stringify({ type: 'decline_draw' }))}>Decline</button></div>}
           {(game.isGameOver() || result) && <div className="game-over"><Crown size={20}/><b>{status}</b>{mode === 'online' ? <button onClick={() => socketRef.current?.send(JSON.stringify({ type: 'rematch' }))}>Request rematch</button> : <button onClick={reset}>Play again</button>}</div>}
         </div>
-        <div className="panel moves"><div className="moves-heading"><span className="eyebrow">THE STORY SO FAR</span><Crown size={17}/></div><h2>Move history</h2>
+        <div className="panel moves"><div className="moves-heading"><span className="eyebrow">THE STORY SO FAR</span><Crown size={17}/></div><h2>Move history</h2><button className="analyze-action" disabled={!game.isGameOver() && !result && ((mode === 'online' && !!roomId) || !!clock)} title="Review untimed games or finished games" onClick={() => setAnalysisPgn(game.pgn())}>Analyze this game</button>
           {!history.length ? <p className="empty">Every great game begins with a first move.</p> :
             <div className="move-list">{Array.from({length: Math.ceil(history.length / 2)}, (_, i) => <div className="move-row" key={i}><span>{i + 1}.</span><b>{history[2 * i]?.san}</b><b>{history[2 * i + 1]?.san || '—'}</b></div>)}</div>}
         </div>
