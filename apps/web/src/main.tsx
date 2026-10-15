@@ -6,6 +6,7 @@ import { selectBotMove, type BotLevel } from '@bluebird/chess-engine';
 import { restoreOnlineGame } from './online-game';
 import { remaining, switchClock, formatClock, type ClockState } from './clock';
 import { squareAtPoint } from './board-input';
+import { inviteLink, inviteRoom, readSavedSeat } from './invite';
 import './style.css';
 
 const glyphs: Record<string, string> = {
@@ -28,6 +29,10 @@ function copyGame(game: Chess): Chess {
   return next;
 }
 function App() {
+  const [invitedRoom] = useState(() => inviteRoom(window.location.href));
+  const [savedSeat, setSavedSeat] = useState(() => {
+    try { return readSavedSeat(sessionStorage.getItem('bluebird:last-seat')); } catch { return null; }
+  });
   const [timeControl, setTimeControl] = useState(0);
   const [clock, setClock] = useState<ClockState | null>(null);
   const clockHistory = useRef<ClockState[]>([]);
@@ -35,12 +40,12 @@ function App() {
   const [game, setGame] = useState(() => new Chess());
   const [selected, setSelected] = useState<Square | null>(null);
   const [flipped, setFlipped] = useState(false);
-  const [mode, setMode] = useState<'local' | 'bot' | 'online'>('local');
+  const [mode, setMode] = useState<'local' | 'bot' | 'online'>(invitedRoom || savedSeat ? 'online' : 'local');
   const [level, setLevel] = useState<BotLevel>('random');
   const [promotion, setPromotion] = useState<Promotion | null>(null);
   const [sound, setSound] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const [roomInput, setRoomInput] = useState('');
+  const [roomInput, setRoomInput] = useState(invitedRoom ?? '');
   const [roomId, setRoomId] = useState<string | null>(null);
   const [onlineColor, setOnlineColor] = useState<'w' | 'b' | null>(null);
   const [connection, setConnection] = useState<'offline' | 'connecting' | 'connected' | 'disconnected'>('offline');
@@ -147,7 +152,14 @@ function App() {
         setClock(null); setOnlineClocks(null); setDrawOffer(null);
         setFlipped(data.color === 'b');
         setRoomId(data.roomId); setOnlineColor(data.color); setConnection('connected');
-        if (data.token) sessionStorage.setItem(`bluebird:${data.roomId}:${data.color}`, data.token);
+        if (data.token) {
+          const seat = { roomId: data.roomId, color: data.color };
+          setSavedSeat(seat);
+          try {
+            sessionStorage.setItem(`bluebird:${data.roomId}:${data.color}`, data.token);
+            sessionStorage.setItem('bluebird:last-seat', JSON.stringify(seat));
+          } catch { setOnlineNotice('Browser storage is unavailable. Keep this tab open to retain your seat.'); }
+        }
         setGame(new Chess(data.fen)); setResult(null); setOnlineNotice(data.reconnected ? 'Reconnected. Your game is back in sync.' : data.color === 'w' ? 'Room ready. Share the code with your opponent.' : 'You joined the room as Black.');
       } else if (data.type === 'state') {
         try { setGame(restoreOnlineGame(data.fen, data.history)); }
@@ -175,6 +187,18 @@ function App() {
     };
   }
 
+  function recoverSeat(id: string, color: 'w' | 'b' | null) {
+    let token: string | null = null;
+    try { token = sessionStorage.getItem(`bluebird:${id}:${color}`); } catch { /* Recovery is optional. */ }
+    if (token) connectOnline('reconnect', id, token);
+    else setOnlineNotice('This seat cannot be recovered in this browser. Create or join a room instead.');
+  }
+  async function copyInvite() {
+    try {
+      await navigator.clipboard.writeText(inviteLink(window.location.href, roomId!));
+      setOnlineNotice('Invite link copied. Send it to your opponent.');
+    } catch { setOnlineNotice(`Could not copy the invite. Share room code ${roomId} instead.`); }
+  }
   function reset() {
     if (mode === 'online' || roomId) { const previous = socketRef.current; socketRef.current = null; previous?.close(); setRoomId(null); setOnlineColor(null); setConnection('offline'); setOnlineNotice('Create a room or enter an invite code to play online.'); }
     setOnlineClocks(null); setDrawOffer(null); onlineFen.current = null;
@@ -328,11 +352,13 @@ function App() {
           </div>
           {mode === 'online' && <div className="online-box">
             <div className={`connection ${connection}`}><span>{connection === 'connected' ? <Wifi size={15}/> : <WifiOff size={15}/>}</span>{connection === 'connected' ? 'Connected' : connection === 'connecting' ? 'Connecting…' : connection === 'disconnected' ? 'Disconnected' : 'Not connected'}</div>
-            {roomId ? <><label>ROOM CODE</label><div className="room-code">{roomId}<button title="Copy invite" aria-label="Copy room code" onClick={() => void navigator.clipboard?.writeText(roomId)}><Copy size={15}/></button></div><small>Share this code with your opponent.</small></> : <>
+            {roomId ? <><label>ROOM CODE</label><div className="room-code">{roomId}<button title="Copy invite" aria-label="Copy invite link" onClick={() => void copyInvite()}><Copy size={15}/></button></div><small>Copy an invite link or share this room code.</small></> : <>
+              {savedSeat && (!invitedRoom || invitedRoom === savedSeat.roomId) && <button className="primary-action" disabled={connection === 'connecting'} onClick={() => recoverSeat(savedSeat.roomId, savedSeat.color)}>Rejoin {savedSeat.roomId} as {savedSeat.color === 'w' ? 'White' : 'Black'}</button>}
+              {invitedRoom && <p className="online-notice">You’re invited to room {invitedRoom}. Join below to play as Black.</p>}
               <button className="primary-action" disabled={connection === 'connecting'} onClick={() => connectOnline('create')}>Create a room</button>
               <label htmlFor="room-code-input">JOIN WITH A ROOM CODE</label><div className="join-room"><input id="room-code-input" value={roomInput} onChange={e => setRoomInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))} placeholder="e.g. 4F8A21BC" maxLength={8}/><button disabled={roomInput.length !== 8 || connection === 'connecting'} onClick={() => connectOnline('join', roomInput)}>Join</button></div>
             </>}
-            {connection === 'disconnected' && roomId && <button className="primary-action" onClick={() => { const token = sessionStorage.getItem(`bluebird:${roomId}:${onlineColor}`); if (token) connectOnline('reconnect', roomId, token); else setOnlineNotice('This seat cannot be recovered in this browser.'); }}>Reconnect</button>}
+            {connection === 'disconnected' && roomId && <button className="primary-action" onClick={() => recoverSeat(roomId, onlineColor)}>Reconnect</button>}
             {onlineNotice && <p className="online-notice" role="status">{onlineNotice}</p>}
           </div>}
           {mode === 'bot' && <div className="bot-select"><label htmlFor="bot">CHOOSE YOUR OPPONENT</label>
