@@ -243,3 +243,24 @@ test('greedy still captures material when behind without an immediate draw', () 
   assert.equal(game.fen(), fen);
   assert.deepEqual(game.history(), []);
 });
+
+for (const level of ['minimax', 'alphabeta'] as const) {
+  for (const [color, fen, shouldDraw] of [
+    ['white', '4k3/R7/8/8/8/8/7P/4K3 w - - 99 51', false],
+    ['black', 'r3k3/7p/8/8/8/8/8/4K3 b - - 99 51', false],
+    ['white', '6qk/1p6/8/8/8/8/8/KR6 w - - 99 51', true],
+    ['black', 'kr6/8/8/8/8/8/1P6/6QK b - - 99 51', true]
+  ] as const) {
+    test(`${level} retains a result-aware fallback for ${color} when search expires (draw=${shouldDraw})`, t => {
+      const game = new Chess(fen);
+      let elapsed = 0;
+      t.mock.method(performance, 'now', () => elapsed += 100);
+      const move = selectBotMove(game, level, { maxTimeMs: 50 });
+      assert.ok(move);
+      assert.equal(game.fen(), fen);
+      assert.deepEqual(game.history(), []);
+      game.move(move);
+      assert.equal(game.isDrawByFiftyMoves(), shouldDraw);
+    });
+  }
+}

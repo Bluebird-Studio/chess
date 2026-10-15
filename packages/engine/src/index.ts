@@ -112,6 +112,26 @@ function alphaBeta(game: Chess, depth: number, alpha: number, beta: number, ply:
   return best;
 }
 
+// A bounded search still needs a result-aware move if no depth completes.
+// This scans only legal root moves and always restores repetition history.
+function drawAwareFallback(game: Chess, moves: Move[]): Move {
+  // Keep capture ordering, but do not throw away a material advantage with
+  // an immediate draw when a continuing move exists (including clock-rule
+  // draws where a pawn move or capture resets the halfmove counter).
+  const advantage = staticScore(game) * (game.turn() === 'w' ? 1 : -1);
+  if (advantage === 0) return moves[0];
+  for (const move of moves) {
+    game.move(move);
+    let drawn: boolean;
+    try { drawn = game.isDraw(); }
+    finally { game.undo(); }
+    // When behind, salvage an immediate draw before taking material that
+    // resets the fifty-move counter or gives up a repetition opportunity.
+    if (advantage > 0 ? !drawn : drawn) return move;
+  }
+  return moves[0];
+}
+
 /**
  * Selects a legal move without mutating the caller's position.
  * Minimax and alpha-beta respect search budgets. Alpha-beta is iterative;
@@ -127,23 +147,7 @@ export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits
   // finished game before material scoring or a search budget can hide the win.
   const mate = moves.find(move => move.san.endsWith('#'));
   if (mate) return mate;
-  if (level === 'greedy') {
-    // Keep capture ordering, but do not throw away a material advantage with
-    // an immediate draw when a continuing move exists (including clock-rule
-    // draws where a pawn move or capture resets the halfmove counter).
-    const advantage = staticScore(game) * (game.turn() === 'w' ? 1 : -1);
-    if (advantage === 0) return moves[0];
-    for (const move of moves) {
-      game.move(move);
-      let drawn: boolean;
-      try { drawn = game.isDraw(); }
-      finally { game.undo(); }
-      // When behind, salvage an immediate draw before taking material that
-      // resets the fifty-move counter or gives up a repetition opportunity.
-      if (advantage > 0 ? !drawn : drawn) return move;
-    }
-    return moves[0];
-  }
+  if (level === 'greedy') return drawAwareFallback(game, moves);
   if (level === 'positional') {
     const maximizing = game.turn() === 'w';
     let best = moves[0], bestScore = maximizing ? -Infinity : Infinity;
@@ -166,7 +170,7 @@ export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits
   };
   if (level === 'minimax') {
     const maximizing = game.turn() === 'w';
-    let best = moves[0], bestScore = maximizing ? -Infinity : Infinity;
+    let best = drawAwareFallback(game, moves), bestScore = maximizing ? -Infinity : Infinity;
     try {
       for (const move of moves) {
         if (performance.now() >= ctx.deadline) throw ABORT;
@@ -184,7 +188,7 @@ export function selectBotMove(game: Chess, level: BotLevel, limits: SearchLimits
     return best;
   }
   const maximizing = game.turn() === 'w';
-  let best = moves[0];
+  let best = drawAwareFallback(game, moves);
   for (let depth = 1; depth <= 5; depth++) {
     let candidate = best, scoreBest = maximizing ? -Infinity : Infinity;
     try {
