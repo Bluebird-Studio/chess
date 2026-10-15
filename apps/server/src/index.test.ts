@@ -655,3 +655,59 @@ test('joining an offline host reports absence and recovers a playable game', { t
     child.kill('SIGTERM');
   }
 });
+
+for (const jump of [-60_000, 60_000]) {
+  test(`online clocks ignore ${jump > 0 ? 'forward' : 'backward'} wall-clock adjustments`, { timeout: 15000 }, async () => {
+    const port = 33000 + Math.floor(Math.random() * 2000);
+    // Simulate repeated system clock corrections inside the server process.
+    // Real elapsed time and the test runner's timers remain unaffected.
+    const preload = 'data:text/javascript,' + encodeURIComponent(`
+      const realNow = Date.now.bind(Date);
+      let offset = 0;
+      Date.now = () => realNow() + (offset += ${jump});
+    `);
+    const child = spawn(process.execPath, ['--import', 'tsx', '--import', preload, 'src/index.ts'], {
+      cwd: serverDir,
+      env: { ...process.env, PORT: String(port), CLOCK_BASE_MS: '5000', CLOCK_INCREMENT_MS: '0' },
+      stdio: 'pipe'
+    });
+    const clients: WebSocket[] = [];
+    async function connect() {
+      for (let i = 0; i < 50; i++) {
+        try {
+          const ws = await new Promise<WebSocket>((resolve, reject) => {
+            const socket = new WebSocket('ws://127.0.0.1:' + port);
+            socket.once('open', () => resolve(socket));
+            socket.once('error', reject);
+          });
+          clients.push(ws);
+          return ws;
+        } catch { await delay(100); }
+      }
+      throw Error('Server did not start');
+    }
+    try {
+      const white = await connect(), readWhite = inbox(white);
+      white.send(JSON.stringify({ type: 'create' }));
+      const created = await readWhite(m => m.type === 'joined');
+      const black = await connect(), readBlack = inbox(black);
+      black.send(JSON.stringify({ type: 'join', roomId: created.roomId }));
+      await readBlack(m => m.type === 'joined');
+      const initial = await readWhite(m => m.type === 'state');
+      assert.ok(initial.clocks.w > 0 && initial.clocks.w <= 5000);
+      const ticking = await readWhite(m => m.type === 'state' && m.clocks.w < initial.clocks.w);
+      assert.equal(ticking.gameOver, false, 'clock adjustments must not cause a timeout');
+      assert.ok(ticking.clocks.w > 0);
+      assert.equal(ticking.clocks.b, 5000, 'the inactive clock stays unchanged');
+      white.send(JSON.stringify({ type: 'move', from: 'e2', to: 'e4' }));
+      const moved = await readBlack(m => m.type === 'state' && m.history.length === 1);
+      assert.equal(moved.activeClock, 'b');
+      assert.equal(moved.gameOver, false);
+      assert.ok(moved.clocks.w > 0 && moved.clocks.w <= ticking.clocks.w);
+      assert.ok(moved.clocks.b > 0 && moved.clocks.b <= 5000);
+    } finally {
+      for (const ws of clients) ws.terminate();
+      child.kill('SIGTERM');
+    }
+  });
+}
