@@ -17,3 +17,13 @@ test('illegal moves are rejected and legal nonmates are not accepted', () => {
   assert.equal(tryPuzzleMove(puzzles[0].fen, 'g6', 'e5'), null);
   assert.equal(tryPuzzleMove(puzzles[0].fen, 'g6', 'g5')?.solved, false);
 });
+
+test('lessons cover both solving sides and reject legal nonmates for each exercise', () => {
+  assert.deepEqual(new Set(puzzles.map(puzzle => new Chess(puzzle.fen).turn())), new Set(['w', 'b']));
+  for (const puzzle of puzzles) {
+    const game = new Chess(puzzle.fen);
+    const wrong = game.moves({ verbose: true }).find(move => !move.san.endsWith('#'));
+    assert.ok(wrong, puzzle.title);
+    assert.equal(tryPuzzleMove(puzzle.fen, wrong.from, wrong.to)?.solved, false, puzzle.title);
+  }
+});
