@@ -120,3 +120,34 @@ for (const jump of [-60_000, 60_000]) {
     assert.deepEqual(game.history(), history);
   });
 }
+
+for (const turn of ['white', 'black']) {
+  test(`minimax stops at its elapsed budget for ${turn} and restores an interrupted branch`, t => {
+    const game = new Chess();
+    if (turn === 'black') game.move('e4');
+    const fen = game.fen(), history = game.history();
+    let elapsed = 0, clockReads = 0;
+    t.mock.method(performance, 'now', () => {
+      clockReads++;
+      elapsed += 20;
+      return elapsed;
+    });
+    const move = selectBotMove(game, 'minimax', { maxTimeMs: 50, maxNodes: 100_000 });
+    assert.ok(move && game.moves().includes(move.san));
+    assert.equal(clockReads, 4, 'interrupts a recursive branch at the monotonic deadline');
+    assert.equal(game.fen(), fen);
+    assert.deepEqual(game.history(), history);
+  });
+}
+
+test('minimax also respects its node budget when the elapsed clock has not advanced', t => {
+  const game = new Chess();
+  const fen = game.fen();
+  let checks = 0;
+  t.mock.method(performance, 'now', () => { checks++; return 0; });
+  const move = selectBotMove(game, 'minimax', { maxNodes: 100, maxTimeMs: 1000 });
+  assert.ok(move && game.moves().includes(move.san));
+  assert.ok(checks <= 110, `node budget should bound search work (observed ${checks} checks)`);
+  assert.equal(game.fen(), fen);
+  assert.deepEqual(game.history(), []);
+});
