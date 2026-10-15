@@ -58,11 +58,38 @@ interface SearchContext {
   deadline: number;
   table: Map<string, { depth: number; score: number }>;
 }
+// Resolve short forcing exchanges before evaluating material. Checks require a
+// legal evasion rather than a stand-pat score; the shared budget bounds all work.
+function quiescence(game: Chess, alpha: number, beta: number, ply: number, remaining: number, ctx: SearchContext): number {
+  if (++ctx.nodes > ctx.maxNodes || Date.now() >= ctx.deadline) throw ABORT;
+  const terminal = terminalScore(game, ply);
+  if (terminal !== null) return terminal;
+  const maximizing = game.turn() === 'w';
+  const checked = game.isCheck();
+  if (remaining === 0) return staticScore(game);
+  let best = checked ? (maximizing ? -Infinity : Infinity) : staticScore(game);
+  if (!checked) {
+    if (maximizing) alpha = Math.max(alpha, best); else beta = Math.min(beta, best);
+    if (beta <= alpha) return best;
+  }
+  for (const move of ordered(game)) {
+    if (!checked && !move.captured && !move.promotion) continue;
+    game.move(move);
+    let score: number;
+    try { score = quiescence(game, alpha, beta, ply + 1, remaining - 1, ctx); }
+    finally { game.undo(); }
+    best = maximizing ? Math.max(best, score) : Math.min(best, score);
+    if (maximizing) alpha = Math.max(alpha, best); else beta = Math.min(beta, best);
+    if (beta <= alpha) break;
+  }
+  return best;
+}
+
 function alphaBeta(game: Chess, depth: number, alpha: number, beta: number, ply: number, ctx: SearchContext): number {
   if (++ctx.nodes > ctx.maxNodes || Date.now() >= ctx.deadline) throw ABORT;
   const terminal = terminalScore(game, ply);
   if (terminal !== null) return terminal;
-  if (depth === 0) return staticScore(game);
+  if (depth === 0) return quiescence(game, alpha, beta, ply, 6, ctx);
   const key = game.fen();
   const cached = ctx.table.get(key);
   if (cached && cached.depth >= depth) return cached.score;
